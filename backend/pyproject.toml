@@ -1,0 +1,52 @@
+[project]
+name = "portfolio-intelligence-backend"
+version = "0.1.0.dev0"
+description = "Backend platform foundation for Portfolio Intelligence."
+requires-python = "==3.12.12"
+dependencies = [
+    "Django>=5.2,<5.3",
+    "django-filter>=25,<27",
+    "djangorestframework>=3.16,<4",
+    "drf-spectacular>=0.29,<0.31",
+    "numpy>=2.2,<3",
+    "pandas>=2.2,<4",
+    "psycopg[binary]>=3.2,<4",
+    "scipy>=1.15,<2",
+]
+
+[dependency-groups]
+dev = [
+    "django-stubs>=5.2,<6",
+    "hypothesis>=6.130,<7",
+    "mypy>=1.15,<3",
+    "pytest>=8.3,<10",
+    "pytest-django>=4.11,<5",
+    "ruff>=0.11,<0.17",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "DJ"]
+
+[tool.ruff.lint.per-file-ignores]
+"config/settings/*.py" = ["F403", "F405"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["mypy_django_plugin.main"]
+files = ["apps", "portfolio_engine"]
+
+[tool.django-stubs]
+django_settings_module = "config.settings.test"
