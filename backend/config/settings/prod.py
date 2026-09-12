@@ -18,12 +18,8 @@ def require_environment(name: str) -> str:
 DEBUG = False
 SECRET_KEY = require_environment("DJANGO_SECRET_KEY")
 ALLOWED_HOSTS = [
-    host.strip()
-    for host in require_environment("DJANGO_ALLOWED_HOSTS").split(",")
-    if host.strip()
+    host.strip() for host in require_environment("DJANGO_ALLOWED_HOSTS").split(",") if host.strip()
 ]
 
 if SECRET_KEY == DEVELOPMENT_SECRET_KEY:  # noqa: F405
-    raise ImproperlyConfigured(
-        "The development secret key cannot be used in production"
-    )
+    raise ImproperlyConfigured("The development secret key cannot be used in production")
