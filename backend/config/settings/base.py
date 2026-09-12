@@ -28,6 +28,12 @@ DJANGO_APPS = [
 
 PLATFORM_APPS = [
     "apps.accounts.apps.AccountsConfig",
+    "apps.assets.apps.AssetsConfig",
+    "apps.market_data.apps.MarketDataConfig",
+    "apps.portfolios.apps.PortfoliosConfig",
+    "apps.analytics.apps.AnalyticsConfig",
+    "apps.optimization.apps.OptimizationConfig",
+    "apps.backtesting.apps.BacktestingConfig",
 ]
 
 INSTALLED_APPS = [

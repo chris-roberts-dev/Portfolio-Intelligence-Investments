@@ -21,6 +21,9 @@ logs:
 backend-shell:
 	$(COMPOSE) run --rm backend sh
 
+frontend-shell:
+	$(COMPOSE) run --rm frontend sh
+
 db-shell:
 	$(COMPOSE) exec db sh -lc 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
 
