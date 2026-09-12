@@ -9,6 +9,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 CONTRACT_PATHS = (
     BACKEND_ROOT / "portfolio_engine" / "contracts" / "market_data.py",
+    BACKEND_ROOT / "portfolio_engine" / "contracts" / "market_data_validation.py",
     BACKEND_ROOT / "apps" / "market_data" / "providers" / "base.py",
 )
 
