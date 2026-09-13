@@ -7,13 +7,22 @@ from pathlib import Path
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
-CONTRACT_PATHS = (
+PURE_MARKET_DATA_PATHS = (
+    BACKEND_ROOT / "portfolio_engine" / "config.py",
     BACKEND_ROOT / "portfolio_engine" / "contracts" / "market_data.py",
     BACKEND_ROOT / "portfolio_engine" / "contracts" / "market_data_validation.py",
+    BACKEND_ROOT / "apps" / "market_data" / "contracts.py",
     BACKEND_ROOT / "apps" / "market_data" / "providers" / "base.py",
+    BACKEND_ROOT / "apps" / "market_data" / "providers" / "registry.py",
+    BACKEND_ROOT / "apps" / "market_data" / "providers" / "mock.py",
+    BACKEND_ROOT / "apps" / "market_data" / "providers" / "csv.py",
+    BACKEND_ROOT / "apps" / "market_data" / "services" / "asset_resolution.py",
+    BACKEND_ROOT / "apps" / "market_data" / "services" / "market_bar_query.py",
 )
 
-FORBIDDEN_IMPORT_ROOTS = {
+YFINANCE_ADAPTER_PATH = BACKEND_ROOT / "apps" / "market_data" / "providers" / "yfinance.py"
+
+FORBIDDEN_PURE_IMPORT_ROOTS = {
     "alpaca",
     "celery",
     "django",
@@ -21,12 +30,14 @@ FORBIDDEN_IMPORT_ROOTS = {
     "redis",
     "requests",
     "rest_framework",
+    "socket",
+    "urllib",
     "yfinance",
 }
 
 
 def imported_root_names(path: Path) -> set[str]:
-    """Return top-level imported module names from a Python source file."""
+    """Return top-level statically imported module names from a Python file."""
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     roots: set[str] = set()
 
@@ -39,13 +50,58 @@ def imported_root_names(path: Path) -> set[str]:
     return roots
 
 
-def test_market_data_contracts_are_framework_and_provider_independent() -> None:
-    """Contracts must not pull framework, HTTP, or provider SDK dependencies."""
+def dynamically_imported_modules(path: Path) -> set[str]:
+    """Return literal modules loaded with importlib.import_module()."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    modules: set[str] = set()
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+
+        if not isinstance(node.func, ast.Attribute):
+            continue
+
+        if node.func.attr != "import_module" or not node.args:
+            continue
+
+        module_argument = node.args[0]
+
+        if isinstance(module_argument, ast.Constant) and isinstance(
+            module_argument.value,
+            str,
+        ):
+            modules.add(module_argument.value.split(".", maxsplit=1)[0])
+
+    return modules
+
+
+def test_pure_market_data_boundaries_avoid_forbidden_dependencies() -> None:
+    """Pure contracts and application boundaries must stay provider independent."""
     violations: dict[str, list[str]] = {}
 
-    for path in CONTRACT_PATHS:
-        forbidden = sorted(imported_root_names(path) & FORBIDDEN_IMPORT_ROOTS)
+    for path in PURE_MARKET_DATA_PATHS:
+        forbidden = sorted(imported_root_names(path) & FORBIDDEN_PURE_IMPORT_ROOTS)
+
         if forbidden:
             violations[str(path.relative_to(BACKEND_ROOT))] = forbidden
 
     assert violations == {}
+
+
+def test_yfinance_sdk_loading_is_confined_to_yfinance_adapter() -> None:
+    """Only the dedicated adapter may load the yfinance provider package."""
+    import_sites: list[str] = []
+
+    for root in (
+        BACKEND_ROOT / "apps",
+        BACKEND_ROOT / "portfolio_engine",
+    ):
+        for path in sorted(root.rglob("*.py")):
+            imported = imported_root_names(path)
+            imported.update(dynamically_imported_modules(path))
+
+            if "yfinance" in imported:
+                import_sites.append(str(path.relative_to(BACKEND_ROOT)))
+
+    assert import_sites == [str(YFINANCE_ADAPTER_PATH.relative_to(BACKEND_ROOT))]

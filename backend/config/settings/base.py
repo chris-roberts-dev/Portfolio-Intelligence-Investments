@@ -106,6 +106,24 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+MARKET_DATA_DEFAULT_PROVIDER = (
+    os.environ.get(
+        "MARKET_DATA_DEFAULT_PROVIDER",
+        "mock",
+    )
+    .strip()
+    .lower()
+)
+
+MARKET_DATA_ALLOWED_PROVIDERS = tuple(
+    provider.strip().lower()
+    for provider in os.environ.get(
+        "MARKET_DATA_ALLOWED_PROVIDERS",
+        "mock",
+    ).split(",")
+    if provider.strip()
+)
+
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
