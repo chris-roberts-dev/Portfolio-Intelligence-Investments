@@ -10,7 +10,6 @@ from apps.market_data.providers.base import (
     ProviderIssue,
     ResolvedProviderAsset,
 )
-
 from portfolio_engine.contracts.market_data import PriceBar, PriceFrame
 
 

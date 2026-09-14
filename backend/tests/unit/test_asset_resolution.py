@@ -3,6 +3,8 @@
 from uuid import UUID
 
 import pytest
+
+from apps.market_data.providers.base import ResolvedProviderAsset
 from apps.market_data.services.asset_resolution import (
     AssetProviderSymbolRecord,
     AssetResolutionError,
@@ -15,8 +17,6 @@ from apps.market_data.services.asset_resolution import (
     UnresolvedAssetSymbol,
     canonicalize_user_symbols,
 )
-
-from apps.market_data.providers.base import ResolvedProviderAsset
 
 AAPL_ID = UUID("00000000-0000-0000-0000-000000000001")
 MSFT_ID = UUID("00000000-0000-0000-0000-000000000002")
