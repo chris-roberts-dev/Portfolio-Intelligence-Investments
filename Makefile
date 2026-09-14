@@ -1,6 +1,6 @@
 COMPOSE := docker compose
 
-.PHONY: bootstrap-env up down logs backend-shell db-shell check lint format-check typecheck test lock
+.PHONY: bootstrap-env up down logs backend-shell db-shell check lint format-check typecheck test lock market-data-offline-demo market-data-live-smoke
 
 bootstrap-env:
 	@test -f .env || cp .env.example .env
@@ -10,7 +10,7 @@ up:
 	$(COMPOSE) up -d
 
 up-build:
-	$(COMPOSE) up --build -d	
+	$(COMPOSE) up --build -d
 
 down:
 	$(COMPOSE) down
@@ -47,3 +47,9 @@ lock:
 
 openapi:
 	$(COMPOSE) run --rm backend python manage.py spectacular --validate --file openapi.yaml
+
+market-data-offline-demo:
+	cd backend && uv run python -m scripts.market_data_offline_demo
+
+market-data-live-smoke:
+	cd backend && uv run python -m scripts.market_data_live_smoke

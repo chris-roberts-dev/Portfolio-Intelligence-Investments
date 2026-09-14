@@ -55,6 +55,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/MarketBarValidationError'
           description: Request or provider-selection validation failed.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketBarApiError'
+          description: The authenticated user is not authorized to request the selected
+            non-default provider.
+        '429':
+          description: The market-bar query throttle was exceeded.
         '503':
           content:
             application/json:

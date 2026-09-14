@@ -1,6 +1,6 @@
 # Portfolio Intelligence — Local Development Setup
 
-This document defines the Phase 1 local-development and clean-clone workflow for Portfolio Intelligence.
+This document defines the local-development and clean-clone workflow for Portfolio Intelligence, including the Phase 2 market-data operational evidence required by the Data Gate.
 
 The development stack is Docker-first:
 
@@ -19,7 +19,7 @@ Required for the Docker-first runtime:
 - Docker Desktop or Docker Engine with Docker Compose v2;
 - GNU Make if using the repository Make targets.
 
-Required only when running quality tools directly on the host:
+Required when running quality tools or the Phase 2 market-data evidence commands directly on the host:
 
 - Python 3.12.12;
 - `uv`;
@@ -61,6 +61,12 @@ Build and start PostgreSQL, Django, and the React/Vite frontend:
 docker compose up -d --build
 ```
 
+or:
+
+```text
+make up-build
+```
+
 Check service state:
 
 ```text
@@ -73,7 +79,7 @@ Expected development services:
 - `backend` — running;
 - `frontend` — healthy.
 
-The equivalent foreground workflow is:
+Start already-built services with:
 
 ```text
 make up
@@ -164,6 +170,86 @@ npm run build
 
 `npm ci` must use the committed `package-lock.json`. Do not replace deterministic installs with an unlocked dependency update in normal validation.
 
+## Phase 2 market-data operational evidence
+
+The Phase 2 Data Gate includes both deterministic offline evidence and one explicitly invoked bounded live yfinance smoke check.
+
+Neither workflow performs portfolio analytics or later-phase calculations.
+
+### Deterministic offline demonstration
+
+From the repository root:
+
+```text
+make market-data-offline-demo
+```
+
+Equivalent direct command from `backend/`:
+
+```text
+uv run python -m scripts.market_data_offline_demo
+```
+
+The command uses only committed CSV sample data and performs no network I/O.
+
+It must preserve this ordered result behavior:
+
+1. `AAPL` — `SUCCEEDED`, 5 bars;
+2. `MSFT` — `SUCCEEDED`, 5 bars;
+3. `EMPTY` — `NO_DATA`, 0 bars;
+4. `UNKNOWN` — `NOT_FOUND`, 0 bars.
+
+The demonstration also proves:
+
+- provider provenance is `csv`;
+- interval is `1d`;
+- request bounds use inclusive start and exclusive end;
+- duplicate requested symbols preserve first-occurrence order and are de-duplicated;
+- total output row count is 10;
+- `NO_DATA` and `NOT_FOUND` remain explicit per-symbol outcomes rather than being silently dropped.
+
+The deterministic regression test is:
+
+```text
+cd backend
+uv run pytest -q tests/integration/test_market_data_offline_demo.py
+```
+
+### Explicit opt-in live yfinance smoke
+
+The live smoke is manual operational evidence. It is intentionally excluded from normal pytest and pull-request CI.
+
+From the repository root:
+
+```text
+make market-data-live-smoke
+```
+
+Equivalent direct command from `backend/`:
+
+```text
+uv run python -m scripts.market_data_live_smoke
+```
+
+The smoke test is deliberately bounded:
+
+- provider: `yfinance`;
+- symbols: `AAPL`, `MSFT`;
+- start: `2025-01-02` inclusive;
+- end: `2025-01-10` exclusive.
+
+A passing run requires both symbols to return non-empty canonical frames and validates:
+
+- ascending, unique canonical bars;
+- requested date bounds;
+- yfinance source provenance;
+- one consistent batch retrieval timestamp;
+- the existing canonical market-data validator.
+
+The smoke test performs live external network I/O and can fail because the upstream provider or network is unavailable. A failure is a Phase 2 Data Gate blocker until a successful bounded run is recorded; it must not be hidden by provider fallback.
+
+The smoke command must never be added to normal pull-request CI.
+
 ## OpenAPI contract
 
 The generated OpenAPI document is committed at:
@@ -209,11 +295,11 @@ The frontend CI job validates:
 - Vitest;
 - the Vite production build.
 
-Phase 1 CI must not depend on live market-data providers or other external financial-data services.
+Pull-request CI must not depend on live market-data providers or other external financial-data services. The bounded yfinance smoke is always explicitly invoked outside normal PR CI.
 
 ## Clean-clone validation
 
-Use this checklist to prove the Phase 1 platform from an empty local environment.
+Use this checklist to prove the repository platform from an empty local environment.
 
 > **Warning:** `docker compose down -v` deletes the development PostgreSQL volume. Use it only when the local development database is disposable.
 
@@ -320,7 +406,17 @@ docker compose run --rm backend pytest -q
 
 All commands must exit successfully.
 
-### 9. Verify frontend quality gates
+### 9. Verify the deterministic Phase 2 offline market-data workflow
+
+From the repository root:
+
+```text
+make market-data-offline-demo
+```
+
+The command must complete without network access and produce the ordered `SUCCEEDED`, `SUCCEEDED`, `NO_DATA`, `NOT_FOUND` outcomes documented above with `row_count` equal to 10.
+
+### 10. Verify frontend quality gates
 
 ```text
 docker compose run --rm frontend npm run typecheck
@@ -330,7 +426,7 @@ docker compose run --rm frontend npm run build
 
 All commands must exit successfully.
 
-### 10. Verify the committed OpenAPI contract
+### 11. Verify the committed OpenAPI contract
 
 ```text
 make openapi
@@ -339,7 +435,7 @@ git diff --exit-code -- backend/openapi.yaml
 
 Schema generation must validate successfully and produce no diff.
 
-### 11. Confirm the repository remains clean
+### 12. Confirm the repository remains clean
 
 ```text
 git status --short
@@ -351,7 +447,7 @@ The clean-clone validation passes only when the command returns no tracked or un
 
 Phase 1 is not complete merely because individual commands pass in an existing development environment.
 
-The exit gate requires all of the following from a clean clone:
+The Phase 1 exit gate requires all of the following from a clean clone:
 
 1. documented setup succeeds;
 2. PostgreSQL becomes healthy;
@@ -362,3 +458,11 @@ The exit gate requires all of the following from a clean clone:
 7. frontend type checking, tests, and build pass;
 8. generated OpenAPI has no unintended drift;
 9. GitHub Actions are green.
+
+## Phase 2 Data Gate operational evidence
+
+The deterministic offline workflow is part of the clean-clone evidence and must pass without network access.
+
+Separately, Phase 2 is not operationally complete until the explicitly invoked bounded live yfinance smoke has succeeded at least once against the current adapter implementation.
+
+The live smoke remains outside normal PR CI so pull requests stay deterministic.
