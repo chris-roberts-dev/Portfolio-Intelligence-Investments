@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import importlib
 import math
+import random
+import time
+from collections import deque
 from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime
 from enum import StrEnum
@@ -24,14 +27,24 @@ from apps.market_data.providers.base import (
     ProviderIssue,
     ResolvedProviderAsset,
 )
+from apps.market_data.providers.safety import safe_provider_issue
 from portfolio_engine.contracts.market_data import PriceBar, PriceFrame
 from portfolio_engine.contracts.market_data_validation import (
     MarketDataQualityError,
     validate_price_frame,
 )
+from portfolio_engine.contracts.provider_execution import (
+    ProviderExecutionFailure,
+    ProviderExecutionPolicy,
+    ProviderFailureCode,
+    ProviderRateLimitPolicy,
+)
 
 type YFinanceDownloader = Callable[..., pd.DataFrame | None]
 type Clock = Callable[[], datetime]
+type Sleeper = Callable[[float], None]
+type JitterSampler = Callable[[float, float], float]
+type MonotonicClock = Callable[[], float]
 
 _REQUIRED_PRICE_COLUMNS = frozenset(
     {
@@ -44,14 +57,38 @@ _REQUIRED_PRICE_COLUMNS = frozenset(
     }
 )
 
+YFINANCE_RATE_LIMIT_POLICY = ProviderRateLimitPolicy(
+    max_requests=1,
+    window_seconds=1.0,
+)
+
+YFINANCE_EXECUTION_POLICY = ProviderExecutionPolicy(
+    rate_limit=YFINANCE_RATE_LIMIT_POLICY,
+)
+
 
 class YFinanceProviderIssueCode(StrEnum):
     """Stable per-asset issue codes emitted by the yfinance adapter."""
 
     NO_DATA = "NO_DATA"
+    THROTTLED = "THROTTLED"
     PROVIDER_ERROR = "PROVIDER_ERROR"
     NORMALIZATION_ERROR = "NORMALIZATION_ERROR"
     DATA_QUALITY_ERROR = "DATA_QUALITY_ERROR"
+
+
+class _DownloadAttemptsExhausted(RuntimeError):
+    """Internal signal that a provider download cannot be attempted again."""
+
+    def __init__(
+        self,
+        failure: ProviderExecutionFailure,
+        *,
+        attempts_made: int,
+    ) -> None:
+        super().__init__(failure.message)
+        self.failure = failure
+        self.attempts_made = attempts_made
 
 
 class YFinanceMarketDataProvider:
@@ -64,9 +101,18 @@ class YFinanceMarketDataProvider:
         *,
         downloader: YFinanceDownloader | None = None,
         clock: Clock | None = None,
+        execution_policy: ProviderExecutionPolicy = YFINANCE_EXECUTION_POLICY,
+        sleeper: Sleeper | None = None,
+        jitter_sampler: JitterSampler | None = None,
+        monotonic_clock: MonotonicClock | None = None,
     ) -> None:
         self._downloader = downloader or _download_yfinance
         self._clock = clock or _utc_now
+        self._execution_policy = execution_policy
+        self._sleeper = sleeper or time.sleep
+        self._jitter_sampler = jitter_sampler or random.uniform
+        self._monotonic_clock = monotonic_clock or time.monotonic
+        self._request_times: deque[float] = deque()
 
     def get_daily_bars(
         self,
@@ -93,28 +139,25 @@ class YFinanceMarketDataProvider:
         provider_symbols = tuple(dict.fromkeys(asset.provider_symbol for asset in assets))
 
         try:
-            downloaded = self._downloader(
-                tickers=list(provider_symbols),
-                start=start.isoformat(),
-                end=end.isoformat(),
-                interval="1d",
-                actions=False,
-                auto_adjust=False,
-                repair=False,
-                keepna=True,
-                group_by="ticker",
-                ignore_tz=True,
-                rounding=False,
-                progress=False,
-                threads=False,
-                multi_level_index=True,
+            downloaded = self._download_with_execution_policy(
+                provider_symbols,
+                start=start,
+                end=end,
             )
-        except Exception as exc:
+        except _DownloadAttemptsExhausted as exc:
+            issue_code = (
+                YFinanceProviderIssueCode.THROTTLED
+                if exc.failure.code is ProviderFailureCode.THROTTLED
+                else YFinanceProviderIssueCode.PROVIDER_ERROR
+            )
             return _batch_failure(
                 assets,
                 retrieved_at=retrieved_at,
-                code=YFinanceProviderIssueCode.PROVIDER_ERROR,
-                message=f"yfinance download failed: {exc}",
+                code=issue_code,
+                message=(
+                    "yfinance download failed after "
+                    f"{exc.attempts_made} attempt(s): {exc.failure.message}"
+                ),
             )
 
         if downloaded is None or downloaded.empty:
@@ -136,9 +179,9 @@ class YFinanceMarketDataProvider:
                     requested_symbol_count=len(provider_symbols),
                 )
             except KeyError:
-                issues[asset.asset_id] = ProviderIssue(
-                    code=YFinanceProviderIssueCode.NO_DATA,
-                    message=(
+                issues[asset.asset_id] = safe_provider_issue(
+                    YFinanceProviderIssueCode.NO_DATA,
+                    (
                         "yfinance returned no history for provider symbol "
                         f"{asset.provider_symbol!r}."
                     ),
@@ -155,9 +198,9 @@ class YFinanceMarketDataProvider:
                 )
 
                 if not frame or _contains_no_observed_market_values(frame):
-                    issues[asset.asset_id] = ProviderIssue(
-                        code=YFinanceProviderIssueCode.NO_DATA,
-                        message=(
+                    issues[asset.asset_id] = safe_provider_issue(
+                        YFinanceProviderIssueCode.NO_DATA,
+                        (
                             "yfinance returned no usable history for provider symbol "
                             f"{asset.provider_symbol!r}."
                         ),
@@ -166,15 +209,15 @@ class YFinanceMarketDataProvider:
 
                 validate_price_frame(frame)
             except MarketDataQualityError as exc:
-                issues[asset.asset_id] = ProviderIssue(
-                    code=YFinanceProviderIssueCode.DATA_QUALITY_ERROR,
-                    message=str(exc),
+                issues[asset.asset_id] = safe_provider_issue(
+                    YFinanceProviderIssueCode.DATA_QUALITY_ERROR,
+                    str(exc),
                 )
                 continue
             except (KeyError, TypeError, ValueError) as exc:
-                issues[asset.asset_id] = ProviderIssue(
-                    code=YFinanceProviderIssueCode.NORMALIZATION_ERROR,
-                    message=str(exc),
+                issues[asset.asset_id] = safe_provider_issue(
+                    YFinanceProviderIssueCode.NORMALIZATION_ERROR,
+                    str(exc),
                 )
                 continue
 
@@ -185,6 +228,106 @@ class YFinanceMarketDataProvider:
             issues=MappingProxyType(issues),
             retrieved_at=retrieved_at,
         )
+
+    def _download_with_execution_policy(
+        self,
+        provider_symbols: tuple[str, ...],
+        *,
+        start: date,
+        end: date,
+    ) -> pd.DataFrame | None:
+        attempts_made = 0
+
+        while True:
+            self._acquire_rate_limit_slot()
+            attempts_made += 1
+
+            try:
+                return self._downloader(
+                    tickers=list(provider_symbols),
+                    start=start.isoformat(),
+                    end=end.isoformat(),
+                    interval="1d",
+                    actions=False,
+                    auto_adjust=False,
+                    repair=False,
+                    keepna=True,
+                    group_by="ticker",
+                    ignore_tz=True,
+                    rounding=False,
+                    progress=False,
+                    threads=False,
+                    multi_level_index=True,
+                    timeout=self._execution_policy.timeout_seconds,
+                )
+            except Exception as exc:
+                failure = _classify_download_exception(exc)
+
+                if not self._execution_policy.retry.should_retry(
+                    failure,
+                    attempts_made=attempts_made,
+                ):
+                    raise _DownloadAttemptsExhausted(
+                        failure,
+                        attempts_made=attempts_made,
+                    ) from exc
+
+                lower_bound, upper_bound = self._execution_policy.retry.backoff_bounds(
+                    attempts_made=attempts_made,
+                    retry_after_seconds=failure.retry_after_seconds,
+                )
+                delay = self._jitter_sampler(
+                    lower_bound,
+                    upper_bound,
+                )
+
+                if not lower_bound <= delay <= upper_bound:
+                    raise ValueError(
+                        "jitter sampler returned a delay outside policy bounds"
+                    ) from None
+
+                self._sleeper(delay)
+
+    def _acquire_rate_limit_slot(self) -> None:
+        rate_limit = self._execution_policy.rate_limit
+
+        if rate_limit is None:
+            return
+
+        now = self._monotonic_clock()
+        self._discard_expired_request_times(
+            now=now,
+            window_seconds=rate_limit.window_seconds,
+        )
+
+        if len(self._request_times) >= rate_limit.max_requests:
+            ready_at = self._request_times[0] + rate_limit.window_seconds
+            delay = max(0.0, ready_at - now)
+
+            if delay > 0.0:
+                self._sleeper(delay)
+
+            now = max(
+                self._monotonic_clock(),
+                ready_at,
+            )
+            self._discard_expired_request_times(
+                now=now,
+                window_seconds=rate_limit.window_seconds,
+            )
+
+        self._request_times.append(now)
+
+    def _discard_expired_request_times(
+        self,
+        *,
+        now: float,
+        window_seconds: float,
+    ) -> None:
+        cutoff = now - window_seconds
+
+        while self._request_times and self._request_times[0] <= cutoff:
+            self._request_times.popleft()
 
 
 def _download_yfinance(**kwargs: object) -> pd.DataFrame | None:
@@ -209,6 +352,49 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def _classify_download_exception(
+    exc: Exception,
+) -> ProviderExecutionFailure:
+    class_name = type(exc).__name__.lower()
+    message = str(exc).strip() or type(exc).__name__
+    retry_after_seconds = _retry_after_seconds(exc)
+
+    if "ratelimit" in class_name or "throttle" in class_name:
+        code = ProviderFailureCode.THROTTLED
+    elif isinstance(exc, TimeoutError) or "timeout" in class_name:
+        code = ProviderFailureCode.TIMEOUT
+    elif (
+        isinstance(exc, (ConnectionError, OSError))
+        or "connection" in class_name
+        or "network" in class_name
+    ):
+        code = ProviderFailureCode.TRANSIENT
+    else:
+        code = ProviderFailureCode.NON_RETRYABLE
+
+    return ProviderExecutionFailure(
+        code=code,
+        message=message,
+        retry_after_seconds=retry_after_seconds,
+    )
+
+
+def _retry_after_seconds(
+    exc: Exception,
+) -> float | None:
+    value = getattr(exc, "retry_after_seconds", None)
+
+    if isinstance(value, bool) or not isinstance(value, Real):
+        return None
+
+    retry_after = float(value)
+
+    if not math.isfinite(retry_after) or retry_after < 0.0:
+        return None
+
+    return retry_after
+
+
 def _batch_failure(
     assets: Sequence[ResolvedProviderAsset],
     *,
@@ -217,9 +403,9 @@ def _batch_failure(
     message: str,
 ) -> ProviderBatchResult:
     issues = {
-        asset.asset_id: ProviderIssue(
-            code=code,
-            message=message,
+        asset.asset_id: safe_provider_issue(
+            code,
+            message,
         )
         for asset in assets
     }

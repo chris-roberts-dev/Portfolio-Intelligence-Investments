@@ -11,6 +11,8 @@ PURE_MARKET_DATA_PATHS = (
     BACKEND_ROOT / "portfolio_engine" / "config.py",
     BACKEND_ROOT / "portfolio_engine" / "contracts" / "market_data.py",
     BACKEND_ROOT / "portfolio_engine" / "contracts" / "market_data_validation.py",
+    BACKEND_ROOT / "portfolio_engine" / "contracts" / "market_data_quality.py",
+    BACKEND_ROOT / "portfolio_engine" / "contracts" / "provider_execution.py",
     BACKEND_ROOT / "apps" / "market_data" / "contracts.py",
     BACKEND_ROOT / "apps" / "market_data" / "providers" / "base.py",
     BACKEND_ROOT / "apps" / "market_data" / "providers" / "registry.py",

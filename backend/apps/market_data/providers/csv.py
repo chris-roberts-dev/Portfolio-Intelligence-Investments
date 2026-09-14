@@ -18,6 +18,7 @@ from apps.market_data.providers.base import (
     ProviderIssue,
     ResolvedProviderAsset,
 )
+from apps.market_data.providers.safety import safe_provider_issue
 from portfolio_engine.contracts.market_data import PriceBar, PriceFrame
 from portfolio_engine.contracts.market_data_validation import (
     MarketDataQualityError,
@@ -64,7 +65,15 @@ class CsvMarketDataProvider:
             normalized_paths[provider_symbol] = Path(path)
 
         self._paths: Mapping[str, Path] = MappingProxyType(normalized_paths)
-        self._issues: Mapping[UUID, ProviderIssue] = MappingProxyType(dict(issues or {}))
+        self._issues: Mapping[UUID, ProviderIssue] = MappingProxyType(
+            {
+                asset_id: safe_provider_issue(
+                    issue.code,
+                    issue.message,
+                )
+                for asset_id, issue in (issues or {}).items()
+            }
+        )
         self._retrieved_at = retrieved_at
 
     def get_daily_bars(
@@ -90,11 +99,9 @@ class CsvMarketDataProvider:
             path = self._paths.get(asset.provider_symbol)
 
             if path is None:
-                issues[asset.asset_id] = ProviderIssue(
-                    code=CsvProviderIssueCode.NO_DATA,
-                    message=(
-                        f"No CSV path is configured for provider symbol {asset.provider_symbol!r}."
-                    ),
+                issues[asset.asset_id] = safe_provider_issue(
+                    CsvProviderIssueCode.NO_DATA,
+                    (f"No CSV path is configured for provider symbol {asset.provider_symbol!r}."),
                 )
                 continue
 
@@ -108,15 +115,15 @@ class CsvMarketDataProvider:
 
                 validate_price_frame(filtered_frame)
             except MarketDataQualityError as exc:
-                issues[asset.asset_id] = ProviderIssue(
-                    code=CsvProviderIssueCode.DATA_QUALITY_ERROR,
-                    message=str(exc),
+                issues[asset.asset_id] = safe_provider_issue(
+                    CsvProviderIssueCode.DATA_QUALITY_ERROR,
+                    str(exc),
                 )
                 continue
             except (csv.Error, OSError, ValueError) as exc:
-                issues[asset.asset_id] = ProviderIssue(
-                    code=CsvProviderIssueCode.CSV_ERROR,
-                    message=str(exc),
+                issues[asset.asset_id] = safe_provider_issue(
+                    CsvProviderIssueCode.CSV_ERROR,
+                    str(exc),
                 )
                 continue
 

@@ -15,6 +15,7 @@ from apps.market_data.providers.base import (
     ProviderIssue,
     ResolvedProviderAsset,
 )
+from apps.market_data.providers.safety import safe_provider_issue
 from portfolio_engine.contracts.market_data import PriceFrame
 from portfolio_engine.contracts.market_data_validation import (
     MarketDataQualityError,
@@ -35,7 +36,15 @@ class MockMarketDataProvider:
         issues: Mapping[UUID, ProviderIssue] | None = None,
     ) -> None:
         self._fixtures: Mapping[UUID, PriceFrame] = MappingProxyType(dict(fixtures))
-        self._issues: Mapping[UUID, ProviderIssue] = MappingProxyType(dict(issues or {}))
+        self._issues: Mapping[UUID, ProviderIssue] = MappingProxyType(
+            {
+                asset_id: safe_provider_issue(
+                    issue.code,
+                    issue.message,
+                )
+                for asset_id, issue in (issues or {}).items()
+            }
+        )
         self._retrieved_at = retrieved_at
 
     def get_daily_bars(
@@ -61,9 +70,9 @@ class MockMarketDataProvider:
             fixture = self._fixtures.get(asset.asset_id)
 
             if fixture is None:
-                issues[asset.asset_id] = ProviderIssue(
-                    code="NO_DATA",
-                    message="No mock fixture is configured for this asset.",
+                issues[asset.asset_id] = safe_provider_issue(
+                    "NO_DATA",
+                    "No mock fixture is configured for this asset.",
                 )
                 continue
 
@@ -77,9 +86,9 @@ class MockMarketDataProvider:
 
                 validate_price_frame(filtered_frame)
             except (MarketDataQualityError, ValueError) as exc:
-                issues[asset.asset_id] = ProviderIssue(
-                    code="DATA_QUALITY_ERROR",
-                    message=str(exc),
+                issues[asset.asset_id] = safe_provider_issue(
+                    "DATA_QUALITY_ERROR",
+                    str(exc),
                 )
                 continue
 

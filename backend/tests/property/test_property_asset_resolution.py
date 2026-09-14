@@ -3,13 +3,14 @@
 import string
 from uuid import UUID
 
+from hypothesis import given
+from hypothesis import strategies as st
+
 from apps.market_data.services.asset_resolution import (
     AssetProviderSymbolRecord,
     InMemoryAssetResolver,
     canonicalize_user_symbols,
 )
-from hypothesis import given
-from hypothesis import strategies as st
 
 RAW_SYMBOLS = st.lists(
     st.text(

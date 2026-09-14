@@ -20,6 +20,47 @@ paths:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
           description: ''
+  /api/v1/market-data/bars/query/:
+    post:
+      operationId: market_data_bars_query
+      description: Resolve symbols and return bounded canonical daily market bars.
+      tags:
+      - market-data
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarketBarQuery'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MarketBarQuery'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MarketBarQuery'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketBarBatchResult'
+          description: The provider completed the request. Inspect each ordered symbol
+            result for SUCCEEDED, NOT_FOUND, NO_DATA, or FAILED.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketBarValidationError'
+          description: Request or provider-selection validation failed.
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketBarApiError'
+          description: The configured provider was unavailable or could not be attempted.
   /api/v1/schema/:
     get:
       operationId: schema_retrieve
@@ -177,6 +218,219 @@ components:
           readOnly: true
       required:
       - status
+    IntervalEnum:
+      enum:
+      - 1d
+      type: string
+      description: '* `1d` - 1d'
+    MarketBarApiError:
+      type: object
+      description: Stable transport shape for application/provider-system errors.
+      properties:
+        code:
+          type: string
+          readOnly: true
+        detail:
+          type: string
+          readOnly: true
+      required:
+      - code
+      - detail
+    MarketBarBatchMeta:
+      type: object
+      description: Read-only shared provenance for a market-bar result batch.
+      properties:
+        provider:
+          type: string
+          readOnly: true
+        retrieved_at:
+          type: string
+          format: date-time
+          readOnly: true
+        interval:
+          allOf:
+          - $ref: '#/components/schemas/IntervalEnum'
+          readOnly: true
+        start:
+          type: string
+          format: date
+          readOnly: true
+        end:
+          type: string
+          format: date
+          readOnly: true
+      required:
+      - end
+      - interval
+      - provider
+      - retrieved_at
+      - start
+    MarketBarBatchResult:
+      type: object
+      description: Read-only ordered application result contract.
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MarketBarSymbolResult'
+          readOnly: true
+        meta:
+          allOf:
+          - $ref: '#/components/schemas/MarketBarBatchMeta'
+          readOnly: true
+        row_count:
+          type: integer
+          readOnly: true
+      required:
+      - meta
+      - results
+      - row_count
+    MarketBarQuery:
+      type: object
+      description: Transport contract for a bounded daily market-bar request.
+      properties:
+        symbols:
+          type: array
+          items:
+            type: string
+        start:
+          type: string
+          format: date
+        end:
+          type: string
+          format: date
+        interval:
+          type: string
+          default: 1d
+        provider:
+          type: string
+          nullable: true
+      required:
+      - end
+      - start
+      - symbols
+    MarketBarSymbolResult:
+      type: object
+      description: Read-only transport representation for one requested symbol.
+      properties:
+        symbol:
+          type: string
+          readOnly: true
+        asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StatusEnum'
+          readOnly: true
+        bars:
+          type: array
+          items:
+            $ref: '#/components/schemas/PriceBar'
+          readOnly: true
+        warnings:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - asset_id
+      - bars
+      - status
+      - symbol
+      - warnings
+    MarketBarValidationError:
+      type: object
+      description: Stable transport shape for request/provider-selection validation
+        errors.
+      properties:
+        code:
+          type: string
+          readOnly: true
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          readOnly: true
+      required:
+      - code
+      - errors
+    PriceBar:
+      type: object
+      description: Read-only transport representation of one canonical daily price
+        bar.
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        trade_date:
+          type: string
+          format: date
+          readOnly: true
+        open:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        high:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        low:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        close:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        adjusted_close:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        volume:
+          type: integer
+          readOnly: true
+          nullable: true
+        source:
+          type: string
+          readOnly: true
+        retrieved_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - adjusted_close
+      - asset_id
+      - close
+      - high
+      - low
+      - open
+      - retrieved_at
+      - source
+      - trade_date
+      - volume
+    StatusEnum:
+      enum:
+      - SUCCEEDED
+      - NOT_FOUND
+      - NO_DATA
+      - FAILED
+      type: string
+      description: |-
+        * `SUCCEEDED` - SUCCEEDED
+        * `NOT_FOUND` - NOT_FOUND
+        * `NO_DATA` - NO_DATA
+        * `FAILED` - FAILED
   securitySchemes:
     basicAuth:
       type: http
