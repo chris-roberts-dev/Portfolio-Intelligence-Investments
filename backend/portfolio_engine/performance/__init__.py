@@ -1,5 +1,23 @@
 """Framework-independent portfolio performance calculations."""
 
+from portfolio_engine.performance.downside import (
+    SortinoRatioResult,
+    SortinoRatioWarning,
+    SortinoRatioWarningCode,
+    downside_deviation,
+    sortino_ratio,
+)
+from portfolio_engine.performance.drawdown import (
+    DrawdownSeries,
+    MaximumDrawdownResult,
+    MaximumDrawdownWarning,
+    MaximumDrawdownWarningCode,
+    WealthIndex,
+    drawdown_series,
+    maximum_drawdown,
+    running_peak,
+    wealth_index,
+)
 from portfolio_engine.performance.returns import (
     AnnualizedReturnResult,
     ReturnSeries,
@@ -10,14 +28,44 @@ from portfolio_engine.performance.returns import (
     rolling_cumulative_returns,
     simple_returns,
 )
+from portfolio_engine.performance.statistics import (
+    SharpeRatioResult,
+    SharpeRatioWarning,
+    SharpeRatioWarningCode,
+    annual_effective_rate_to_daily,
+    annualized_volatility,
+    sample_standard_deviation,
+    sharpe_ratio,
+)
 
 __all__ = [
     "AnnualizedReturnResult",
+    "DrawdownSeries",
+    "MaximumDrawdownResult",
+    "MaximumDrawdownWarning",
+    "MaximumDrawdownWarningCode",
     "ReturnSeries",
+    "SharpeRatioResult",
+    "SharpeRatioWarning",
+    "SharpeRatioWarningCode",
+    "SortinoRatioResult",
+    "SortinoRatioWarning",
+    "SortinoRatioWarningCode",
+    "WealthIndex",
+    "annual_effective_rate_to_daily",
     "annualized_geometric_return",
+    "annualized_volatility",
     "cagr",
     "cumulative_return",
+    "downside_deviation",
+    "drawdown_series",
     "log_returns",
+    "maximum_drawdown",
     "rolling_cumulative_returns",
+    "running_peak",
+    "sample_standard_deviation",
+    "sharpe_ratio",
     "simple_returns",
+    "sortino_ratio",
+    "wealth_index",
 ]
