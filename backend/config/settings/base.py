@@ -132,4 +132,9 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     "TITLE": "Portfolio Intelligence API",
     "VERSION": "0.1.0",
+    "ENUM_NAME_OVERRIDES": {
+        "PerformanceDataQualityEnum": (
+            "apps.portfolios.services.dashboard_performance.PerformanceDataQualityState"
+        ),
+    },
 }

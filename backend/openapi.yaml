@@ -3,6 +3,86 @@ info:
   title: Portfolio Intelligence API
   version: 0.1.0
 paths:
+  /api/v1/analytics/portfolios/{portfolio_id}/:
+    get:
+      operationId: portfolio_analytics
+      description: Return owned-portfolio performance/risk analytics for an inclusive-start,
+        exclusive-end trading-session period.
+      parameters:
+      - in: query
+        name: end
+        schema:
+          type: string
+          format: date
+        required: true
+      - in: query
+        name: minimum_acceptable_return_annual
+        schema:
+          type: number
+          format: double
+          default: 0.0
+      - in: path
+        name: portfolio_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: provider
+        schema:
+          type: string
+          nullable: true
+          minLength: 1
+      - in: query
+        name: risk_free_rate_annual
+        schema:
+          type: number
+          format: double
+          default: 0.0
+      - in: query
+        name: start
+        schema:
+          type: string
+          format: date
+        required: true
+      tags:
+      - analytics
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioAnalyticsResult'
+          description: Owned-portfolio analytical result and provenance.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioValidationError'
+          description: Query or provider-selection validation failed.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The selected non-default provider is not authorized.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The portfolio does not exist in the authenticated user's scope.
+        '429':
+          description: The provider-backed read throttle was exceeded.
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: A required provider or analytics dependency is unavailable.
   /api/v1/health/:
     get:
       operationId: health_check
@@ -70,6 +150,177 @@ paths:
               schema:
                 $ref: '#/components/schemas/MarketBarApiError'
           description: The configured provider was unavailable or could not be attempted.
+  /api/v1/portfolios/:
+    get:
+      operationId: portfolio_list
+      description: List portfolios owned by the authenticated user.
+      tags:
+      - portfolios
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PortfolioSummary'
+          description: Owned portfolio summaries.
+  /api/v1/portfolios/{portfolio_id}/:
+    get:
+      operationId: portfolio_detail
+      description: Return one portfolio owned by the authenticated user.
+      parameters:
+      - in: path
+        name: portfolio_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - portfolios
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioSummary'
+          description: Owned portfolio summary.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The portfolio does not exist in the authenticated user's scope.
+  /api/v1/portfolios/{portfolio_id}/holdings/:
+    get:
+      operationId: portfolio_current_holdings
+      description: Return ledger-derived current holdings, raw-close valuation, allocation,
+        warnings, and provenance for an owned portfolio.
+      parameters:
+      - in: path
+        name: portfolio_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: provider
+        schema:
+          type: string
+          nullable: true
+          minLength: 1
+      tags:
+      - portfolios
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentPortfolioHoldings'
+          description: Current holdings and valuation result.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioValidationError'
+          description: Query or provider-selection validation failed.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The selected non-default provider is not authorized.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The portfolio does not exist in the authenticated user's scope.
+        '429':
+          description: The provider-backed read throttle was exceeded.
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: A required provider or valuation dependency is unavailable.
+  /api/v1/portfolios/{portfolio_id}/performance/:
+    get:
+      operationId: portfolio_performance
+      description: Return display-ready daily portfolio value/TWR points and an optional
+        exact-date benchmark series for an inclusive-start/exclusive-end period.
+      parameters:
+      - in: query
+        name: end
+        schema:
+          type: string
+          format: date
+        required: true
+      - in: path
+        name: portfolio_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: provider
+        schema:
+          type: string
+          nullable: true
+          minLength: 1
+      - in: query
+        name: start
+        schema:
+          type: string
+          format: date
+        required: true
+      tags:
+      - portfolios
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardPerformanceResult'
+          description: Display-ready portfolio performance series and provenance.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioValidationError'
+          description: Date-range or provider-selection validation failed.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The selected non-default provider is not authorized.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The portfolio does not exist in the authenticated user's scope.
+        '429':
+          description: The provider-backed read throttle was exceeded.
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: A required provider, calendar, or performance dependency failed.
   /api/v1/schema/:
     get:
       operationId: schema_retrieve
@@ -218,6 +469,480 @@ paths:
           description: ''
 components:
   schemas:
+    AnalyticalResultProvenance:
+      type: object
+      description: Public analytical provenance envelope required by Section 8.8.
+      properties:
+        engine_version:
+          type: string
+          readOnly: true
+        as_of_date:
+          type: string
+          format: date
+          readOnly: true
+        period_start:
+          type: string
+          format: date
+          readOnly: true
+        period_end:
+          type: string
+          format: date
+          readOnly: true
+        data_source:
+          type: string
+          readOnly: true
+        price_field:
+          type: string
+          readOnly: true
+        annualization_factor:
+          type: number
+          format: double
+          readOnly: true
+        benchmark:
+          type: string
+          readOnly: true
+          nullable: true
+        assumptions:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        warnings:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - annualization_factor
+      - as_of_date
+      - assumptions
+      - benchmark
+      - data_source
+      - engine_version
+      - period_end
+      - period_start
+      - price_field
+      - warnings
+    AnnualizedReturnResult:
+      type: object
+      description: CAGR / annualized geometric-return result.
+      properties:
+        value:
+          type: number
+          format: double
+          readOnly: true
+        wealth_ratio:
+          type: number
+          format: double
+          readOnly: true
+        elapsed_days:
+          type: integer
+          readOnly: true
+        elapsed_years:
+          type: number
+          format: double
+          readOnly: true
+        is_short_period:
+          type: boolean
+          readOnly: true
+      required:
+      - elapsed_days
+      - elapsed_years
+      - is_short_period
+      - value
+      - wealth_ratio
+    BenchmarkPerformancePoint:
+      type: object
+      description: One exact-date benchmark point; gaps remain explicit nulls.
+      properties:
+        observation_date:
+          type: string
+          format: date
+          readOnly: true
+        adjusted_close:
+          type: string
+          readOnly: true
+          nullable: true
+        cumulative_return:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        data_quality:
+          allOf:
+          - $ref: '#/components/schemas/PerformanceDataQualityEnum'
+          readOnly: true
+      required:
+      - adjusted_close
+      - cumulative_return
+      - data_quality
+      - observation_date
+    BetaResult:
+      type: object
+      description: Benchmark beta with aligned observation count and warnings.
+      properties:
+        value:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        observations:
+          type: integer
+          readOnly: true
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/EngineWarning'
+          readOnly: true
+      required:
+      - observations
+      - value
+      - warnings
+    ConcentrationResult:
+      type: object
+      description: Canonical current portfolio concentration measures.
+      properties:
+        largest_position_weight:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        herfindahl_hirschman_index:
+          type: number
+          format: double
+          readOnly: true
+        security_position_count:
+          type: integer
+          readOnly: true
+        cash_weight:
+          type: number
+          format: double
+          readOnly: true
+        largest_position_includes_cash:
+          type: boolean
+          readOnly: true
+        hhi_includes_cash:
+          type: boolean
+          readOnly: true
+        long_only:
+          type: boolean
+          readOnly: true
+        weight_sum_tolerance:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - cash_weight
+      - herfindahl_hirschman_index
+      - hhi_includes_cash
+      - largest_position_includes_cash
+      - largest_position_weight
+      - long_only
+      - security_position_count
+      - weight_sum_tolerance
+    CurrentHolding:
+      type: object
+      description: One current ledger-derived holding with its accepted raw-close
+        price.
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        symbol:
+          type: string
+          readOnly: true
+        quantity:
+          type: string
+          readOnly: true
+        trade_date:
+          type: string
+          format: date
+          readOnly: true
+        raw_close:
+          type: string
+          readOnly: true
+        market_value:
+          type: string
+          description: Return exact Decimal position market value without float conversion.
+          readOnly: true
+        stale_trading_sessions:
+          type: integer
+          readOnly: true
+      required:
+      - asset_id
+      - market_value
+      - quantity
+      - raw_close
+      - stale_trading_sessions
+      - symbol
+      - trade_date
+    CurrentPortfolioHoldings:
+      type: object
+      description: Read-only current holdings, value, allocation, and valuation provenance.
+      properties:
+        portfolio_id:
+          type: string
+          format: uuid
+          readOnly: true
+        benchmark_asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        provider:
+          type: string
+          readOnly: true
+        as_of:
+          type: string
+          format: date-time
+          readOnly: true
+        retrieved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        price_field:
+          type: string
+          readOnly: true
+        cash_balance:
+          type: string
+          readOnly: true
+        transaction_count:
+          type: integer
+          readOnly: true
+        holdings:
+          type: array
+          items:
+            $ref: '#/components/schemas/CurrentHolding'
+          readOnly: true
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/CurrentValuationWarning'
+          readOnly: true
+        is_complete:
+          type: boolean
+          readOnly: true
+        valuation:
+          allOf:
+          - $ref: '#/components/schemas/PortfolioValuationResult'
+          readOnly: true
+          nullable: true
+        allocation:
+          allOf:
+          - $ref: '#/components/schemas/PortfolioAllocationResult'
+          readOnly: true
+          nullable: true
+      required:
+      - allocation
+      - as_of
+      - benchmark_asset_id
+      - cash_balance
+      - holdings
+      - is_complete
+      - portfolio_id
+      - price_field
+      - provider
+      - retrieved_at
+      - transaction_count
+      - valuation
+      - warnings
+    CurrentValuationWarning:
+      type: object
+      description: Structured warning emitted by current valuation.
+      properties:
+        code:
+          allOf:
+          - $ref: '#/components/schemas/CurrentValuationWarningCodeEnum'
+          readOnly: true
+        message:
+          type: string
+          readOnly: true
+        asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        symbol:
+          type: string
+          readOnly: true
+      required:
+      - asset_id
+      - code
+      - message
+      - symbol
+    CurrentValuationWarningCodeEnum:
+      enum:
+      - STALE_PRICE_USED
+      - PRICE_NOT_FOUND
+      - PRICE_NO_DATA
+      - PRICE_PROVIDER_FAILED
+      - PRICE_TOO_STALE
+      - PRICE_DATE_OUTSIDE_SESSION_CALENDAR
+      type: string
+      description: |-
+        * `STALE_PRICE_USED` - STALE_PRICE_USED
+        * `PRICE_NOT_FOUND` - PRICE_NOT_FOUND
+        * `PRICE_NO_DATA` - PRICE_NO_DATA
+        * `PRICE_PROVIDER_FAILED` - PRICE_PROVIDER_FAILED
+        * `PRICE_TOO_STALE` - PRICE_TOO_STALE
+        * `PRICE_DATE_OUTSIDE_SESSION_CALENDAR` - PRICE_DATE_OUTSIDE_SESSION_CALENDAR
+    DashboardPerformanceProvenance:
+      type: object
+      description: Requested/effective ranges plus data/calculation provenance.
+      properties:
+        portfolio_id:
+          type: string
+          format: uuid
+          readOnly: true
+        base_currency:
+          type: string
+          readOnly: true
+        provider:
+          type: string
+          readOnly: true
+        requested_start:
+          type: string
+          format: date
+          readOnly: true
+        requested_end_exclusive:
+          type: string
+          format: date
+          readOnly: true
+        effective_start:
+          type: string
+          format: date
+          readOnly: true
+        effective_end_exclusive:
+          type: string
+          format: date
+          readOnly: true
+        data_as_of:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        calculated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        engine_version:
+          type: string
+          readOnly: true
+        price_field:
+          type: string
+          readOnly: true
+        benchmark_asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        benchmark_symbol:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - base_currency
+      - benchmark_asset_id
+      - benchmark_symbol
+      - calculated_at
+      - data_as_of
+      - effective_end_exclusive
+      - effective_start
+      - engine_version
+      - portfolio_id
+      - price_field
+      - provider
+      - requested_end_exclusive
+      - requested_start
+    DashboardPerformanceResult:
+      type: object
+      description: Complete performance-hero backend response contract.
+      properties:
+        summary:
+          allOf:
+          - $ref: '#/components/schemas/PortfolioPerformanceSummary'
+          readOnly: true
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortfolioPerformancePoint'
+          readOnly: true
+        benchmark_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/BenchmarkPerformancePoint'
+          readOnly: true
+        portfolio_data_quality:
+          allOf:
+          - $ref: '#/components/schemas/PerformanceDataQualityEnum'
+          readOnly: true
+        benchmark_data_quality:
+          readOnly: true
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/PerformanceDataQualityEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardPerformanceWarning'
+          readOnly: true
+        provenance:
+          allOf:
+          - $ref: '#/components/schemas/DashboardPerformanceProvenance'
+          readOnly: true
+      required:
+      - benchmark_data_quality
+      - benchmark_points
+      - points
+      - portfolio_data_quality
+      - provenance
+      - summary
+      - warnings
+    DashboardPerformanceWarning:
+      type: object
+      description: One display-ready portfolio or benchmark warning.
+      properties:
+        code:
+          type: string
+          readOnly: true
+        message:
+          type: string
+          readOnly: true
+        observation_date:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        symbol:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - asset_id
+      - code
+      - message
+      - observation_date
+      - symbol
+    EngineWarning:
+      type: object
+      description: Common representation for quantitative-engine warning objects.
+      properties:
+        code:
+          type: string
+          readOnly: true
+        message:
+          type: string
+          readOnly: true
+      required:
+      - code
+      - message
     HealthResponse:
       type: object
       description: OpenAPI response contract for the framework health endpoint.
@@ -368,6 +1093,419 @@ components:
       required:
       - code
       - errors
+    MaximumDrawdownResult:
+      type: object
+      description: Maximum drawdown and its peak/trough locations.
+      properties:
+        value:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        observations:
+          type: integer
+          readOnly: true
+        peak_index:
+          type: integer
+          readOnly: true
+          nullable: true
+        trough_index:
+          type: integer
+          readOnly: true
+          nullable: true
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/EngineWarning'
+          readOnly: true
+      required:
+      - observations
+      - peak_index
+      - trough_index
+      - value
+      - warnings
+    NullEnum:
+      enum:
+      - null
+    PerformanceDataQualityEnum:
+      enum:
+      - CURRENT
+      - STALE
+      - PARTIAL
+      - UNAVAILABLE
+      type: string
+      description: |-
+        * `CURRENT` - CURRENT
+        * `STALE` - STALE
+        * `PARTIAL` - PARTIAL
+        * `UNAVAILABLE` - UNAVAILABLE
+    PortfolioAllocationResult:
+      type: object
+      description: Current security and cash allocation.
+      properties:
+        positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SecurityAllocation'
+          readOnly: true
+        cash_value:
+          type: number
+          format: double
+          readOnly: true
+        cash_weight:
+          type: number
+          format: double
+          readOnly: true
+        total_market_value:
+          type: number
+          format: double
+          readOnly: true
+        weight_sum:
+          type: number
+          format: double
+          readOnly: true
+        weight_sum_tolerance:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - cash_value
+      - cash_weight
+      - positions
+      - total_market_value
+      - weight_sum
+      - weight_sum_tolerance
+    PortfolioAnalyticsResult:
+      type: object
+      description: Complete owned-portfolio analytical response contract.
+      properties:
+        portfolio_id:
+          type: string
+          format: uuid
+          readOnly: true
+        observations:
+          type: integer
+          readOnly: true
+        benchmark_observations:
+          type: integer
+          readOnly: true
+          nullable: true
+        cumulative_return:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        cagr:
+          allOf:
+          - $ref: '#/components/schemas/AnnualizedReturnResult'
+          readOnly: true
+          nullable: true
+        annualized_volatility:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        sharpe:
+          allOf:
+          - $ref: '#/components/schemas/SharpeRatioResult'
+          readOnly: true
+          nullable: true
+        sortino:
+          allOf:
+          - $ref: '#/components/schemas/SortinoRatioResult'
+          readOnly: true
+          nullable: true
+        maximum_drawdown:
+          allOf:
+          - $ref: '#/components/schemas/MaximumDrawdownResult'
+          readOnly: true
+          nullable: true
+        beta:
+          allOf:
+          - $ref: '#/components/schemas/BetaResult'
+          readOnly: true
+          nullable: true
+        current_allocation:
+          allOf:
+          - $ref: '#/components/schemas/PortfolioAllocationResult'
+          readOnly: true
+          nullable: true
+        concentration:
+          allOf:
+          - $ref: '#/components/schemas/ConcentrationResult'
+          readOnly: true
+          nullable: true
+        provenance:
+          allOf:
+          - $ref: '#/components/schemas/AnalyticalResultProvenance'
+          readOnly: true
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortfolioAnalyticsWarning'
+          readOnly: true
+      required:
+      - annualized_volatility
+      - benchmark_observations
+      - beta
+      - cagr
+      - concentration
+      - cumulative_return
+      - current_allocation
+      - maximum_drawdown
+      - observations
+      - portfolio_id
+      - provenance
+      - sharpe
+      - sortino
+      - warnings
+    PortfolioAnalyticsWarning:
+      type: object
+      description: Structured application-level analytical warning.
+      properties:
+        code:
+          allOf:
+          - $ref: '#/components/schemas/PortfolioAnalyticsWarningCodeEnum'
+          readOnly: true
+        message:
+          type: string
+          readOnly: true
+        observations:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - code
+      - message
+      - observations
+    PortfolioAnalyticsWarningCodeEnum:
+      enum:
+      - SOURCE_WARNING
+      - PERFORMANCE_UNAVAILABLE
+      - INSUFFICIENT_HISTORY
+      - UNDEFINED_CAGR
+      - UNDEFINED_SHARPE
+      - UNDEFINED_SORTINO
+      - BENCHMARK_NOT_CONFIGURED
+      - BENCHMARK_NOT_FOUND
+      - BENCHMARK_NO_DATA
+      - BENCHMARK_PROVIDER_FAILED
+      - UNDEFINED_BETA
+      - CURRENT_VALUATION_INCOMPLETE
+      - CURRENT_ALLOCATION_UNAVAILABLE
+      type: string
+      description: |-
+        * `SOURCE_WARNING` - SOURCE_WARNING
+        * `PERFORMANCE_UNAVAILABLE` - PERFORMANCE_UNAVAILABLE
+        * `INSUFFICIENT_HISTORY` - INSUFFICIENT_HISTORY
+        * `UNDEFINED_CAGR` - UNDEFINED_CAGR
+        * `UNDEFINED_SHARPE` - UNDEFINED_SHARPE
+        * `UNDEFINED_SORTINO` - UNDEFINED_SORTINO
+        * `BENCHMARK_NOT_CONFIGURED` - BENCHMARK_NOT_CONFIGURED
+        * `BENCHMARK_NOT_FOUND` - BENCHMARK_NOT_FOUND
+        * `BENCHMARK_NO_DATA` - BENCHMARK_NO_DATA
+        * `BENCHMARK_PROVIDER_FAILED` - BENCHMARK_PROVIDER_FAILED
+        * `UNDEFINED_BETA` - UNDEFINED_BETA
+        * `CURRENT_VALUATION_INCOMPLETE` - CURRENT_VALUATION_INCOMPLETE
+        * `CURRENT_ALLOCATION_UNAVAILABLE` - CURRENT_ALLOCATION_UNAVAILABLE
+    PortfolioApiError:
+      type: object
+      description: Stable transport shape for portfolio application/system errors.
+      properties:
+        code:
+          type: string
+          readOnly: true
+        detail:
+          type: string
+          readOnly: true
+      required:
+      - code
+      - detail
+    PortfolioPerformancePoint:
+      type: object
+      description: One chart-ready portfolio point.
+      properties:
+        observation_date:
+          type: string
+          format: date
+          readOnly: true
+        portfolio_value:
+          type: string
+          readOnly: true
+          nullable: true
+        net_external_flow:
+          type: string
+          readOnly: true
+        daily_return:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        cumulative_return:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        data_quality:
+          allOf:
+          - $ref: '#/components/schemas/PerformanceDataQualityEnum'
+          readOnly: true
+        warnings:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - cumulative_return
+      - daily_return
+      - data_quality
+      - net_external_flow
+      - observation_date
+      - portfolio_value
+      - warnings
+    PortfolioPerformanceSummary:
+      type: object
+      description: Headline selected-period values.
+      properties:
+        starting_value:
+          type: string
+          readOnly: true
+          nullable: true
+        ending_value:
+          type: string
+          readOnly: true
+          nullable: true
+        value_change:
+          type: string
+          readOnly: true
+          nullable: true
+        net_external_flow:
+          type: string
+          readOnly: true
+        investment_gain_loss:
+          type: string
+          readOnly: true
+          nullable: true
+        cumulative_return:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        benchmark_cumulative_return:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+      required:
+      - benchmark_cumulative_return
+      - cumulative_return
+      - ending_value
+      - investment_gain_loss
+      - net_external_flow
+      - starting_value
+      - value_change
+    PortfolioSummary:
+      type: object
+      description: Read-only public portfolio summary.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        base_currency:
+          type: string
+          readOnly: true
+        benchmark_asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - base_currency
+      - benchmark_asset_id
+      - created_at
+      - id
+      - name
+      - updated_at
+    PortfolioValidationError:
+      type: object
+      description: Stable transport shape for portfolio request validation errors.
+      properties:
+        code:
+          type: string
+          readOnly: true
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          readOnly: true
+      required:
+      - code
+      - errors
+    PortfolioValuationResult:
+      type: object
+      description: Quantitative-engine current portfolio valuation.
+      properties:
+        positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PositionValuationResult'
+          readOnly: true
+        security_market_value:
+          type: number
+          format: double
+          readOnly: true
+        cash_value:
+          type: number
+          format: double
+          readOnly: true
+        total_market_value:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - cash_value
+      - positions
+      - security_market_value
+      - total_market_value
+    PositionValuationResult:
+      type: object
+      description: Quantitative-engine valuation of one security position.
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        quantity:
+          type: number
+          format: double
+          readOnly: true
+        valuation_price:
+          type: number
+          format: double
+          readOnly: true
+        market_value:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - asset_id
+      - market_value
+      - quantity
+      - valuation_price
     PriceBar:
       type: object
       description: Read-only transport representation of one canonical daily price
@@ -428,6 +1566,102 @@ components:
       - source
       - trade_date
       - volume
+    SecurityAllocation:
+      type: object
+      description: One current security allocation.
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        market_value:
+          type: number
+          format: double
+          readOnly: true
+        weight:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - asset_id
+      - market_value
+      - weight
+    SharpeRatioResult:
+      type: object
+      description: Sharpe result including explicit risk-free assumptions.
+      properties:
+        value:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        observations:
+          type: integer
+          readOnly: true
+        risk_free_rate_annual:
+          type: number
+          format: double
+          readOnly: true
+        risk_free_rate_daily:
+          type: number
+          format: double
+          readOnly: true
+        annualization_factor:
+          type: integer
+          readOnly: true
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/EngineWarning'
+          readOnly: true
+      required:
+      - annualization_factor
+      - observations
+      - risk_free_rate_annual
+      - risk_free_rate_daily
+      - value
+      - warnings
+    SortinoRatioResult:
+      type: object
+      description: Sortino result including explicit minimum-acceptable-return assumptions.
+      properties:
+        value:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        observations:
+          type: integer
+          readOnly: true
+        minimum_acceptable_return_annual:
+          type: number
+          format: double
+          readOnly: true
+        minimum_acceptable_return_daily:
+          type: number
+          format: double
+          readOnly: true
+        downside_deviation:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        annualization_factor:
+          type: integer
+          readOnly: true
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/EngineWarning'
+          readOnly: true
+      required:
+      - annualization_factor
+      - downside_deviation
+      - minimum_acceptable_return_annual
+      - minimum_acceptable_return_daily
+      - observations
+      - value
+      - warnings
     StatusEnum:
       enum:
       - SUCCEEDED

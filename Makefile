@@ -46,7 +46,7 @@ lock:
 	cd backend && uv lock
 
 openapi:
-	$(COMPOSE) run --rm backend python manage.py spectacular --validate --file openapi.yaml
+	$(COMPOSE) run --rm backend python manage.py spectacular --fail-on-warn --validate --file openapi.yaml
 
 market-data-offline-demo:
 	cd backend && uv run python -m scripts.market_data_offline_demo

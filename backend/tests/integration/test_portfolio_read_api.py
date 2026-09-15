@@ -21,6 +21,7 @@ from apps.market_data.providers.configuration import (
 from apps.market_data.providers.mock import MockMarketDataProvider
 from apps.market_data.services.asset_resolution import InMemoryAssetResolver
 from apps.portfolios.api import views
+from apps.portfolios.api.dependencies import TradingSessionCalendarUnavailable
 from apps.portfolios.models import Portfolio
 from apps.portfolios.services.analytics import (
     PortfolioAnalyticsResult,
@@ -477,12 +478,21 @@ def test_analytics_endpoint_rejects_invalid_or_too_short_period(
 
 
 @pytest.mark.django_db
-def test_unconfigured_trading_calendar_returns_503(
+def test_trading_calendar_unavailability_still_maps_to_503(
     monkeypatch: pytest.MonkeyPatch,
     owner: User,
     portfolio: Portfolio,
 ) -> None:
     install_provider_dependencies(monkeypatch)
+
+    def unavailable_calendar() -> FixedTradingCalendar:
+        raise TradingSessionCalendarUnavailable("No trading-session calendar is configured.")
+
+    monkeypatch.setattr(
+        views,
+        "get_trading_session_calendar",
+        unavailable_calendar,
+    )
 
     response = authenticated_client(owner).get(
         reverse(

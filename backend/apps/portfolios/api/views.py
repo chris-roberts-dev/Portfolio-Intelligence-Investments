@@ -281,9 +281,8 @@ def portfolio_analytics_view(
     if isinstance(provider_context, Response):
         return provider_context
 
-    trading_calendar = get_trading_session_calendar()
-
     try:
+        trading_calendar = get_trading_session_calendar()
         valuation_times = _analytics_valuation_times(
             start=query_serializer.start_date,
             end=query_serializer.end_date,
