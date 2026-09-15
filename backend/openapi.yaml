@@ -525,6 +525,85 @@ paths:
               schema:
                 $ref: '#/components/schemas/PortfolioApiError'
           description: A required provider, calendar, or performance dependency failed.
+  /api/v1/portfolios/{portfolio_id}/review-items/:
+    get:
+      operationId: portfolio_dashboard_review_items
+      description: Return stable owner-scoped data-quality and analytical review counts
+        plus optionally filtered drill-down items.
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: end
+        schema:
+          type: string
+          format: date
+        required: true
+      - in: path
+        name: portfolio_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: provider
+        schema:
+          type: string
+          nullable: true
+          minLength: 1
+      - in: query
+        name: severity
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: start
+        schema:
+          type: string
+          format: date
+        required: true
+      tags:
+      - portfolios
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardReviewItemsResult'
+          description: Dashboard data-quality review items.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioValidationError'
+          description: Range, filter, or provider validation failed.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The selected non-default provider is not authorized.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The portfolio does not exist in the authenticated user's scope.
+        '429':
+          description: The provider-backed read throttle was exceeded.
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: A required provider, calendar, valuation, historical, or analytical
+            dependency failed.
   /api/v1/portfolios/{portfolio_id}/summary/:
     get:
       operationId: portfolio_dashboard_summary
@@ -871,6 +950,20 @@ components:
       - observations
       - value
       - warnings
+    CategoryEnum:
+      enum:
+      - MARKET_DATA
+      - DATA_COVERAGE
+      - PROVIDER
+      - VALUATION
+      - ANALYTICS
+      type: string
+      description: |-
+        * `MARKET_DATA` - MARKET_DATA
+        * `DATA_COVERAGE` - DATA_COVERAGE
+        * `PROVIDER` - PROVIDER
+        * `VALUATION` - VALUATION
+        * `ANALYTICS` - ANALYTICS
     ConcentrationResult:
       type: object
       description: Canonical current portfolio concentration measures.
@@ -2005,6 +2098,238 @@ components:
       - metrics
       - provenance
       - warnings
+    DashboardReviewCount:
+      type: object
+      description: One severity/category count bucket.
+      properties:
+        key:
+          type: string
+          readOnly: true
+        count:
+          type: integer
+          readOnly: true
+      required:
+      - count
+      - key
+    DashboardReviewCounts:
+      type: object
+      description: Unfiltered dashboard review counts.
+      properties:
+        total:
+          type: integer
+          readOnly: true
+        by_severity:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardReviewCount'
+          readOnly: true
+        by_category:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardReviewCount'
+          readOnly: true
+      required:
+      - by_category
+      - by_severity
+      - total
+    DashboardReviewDrilldown:
+      type: object
+      description: Owner-scoped semantic reference for investigating a review item.
+      properties:
+        resource:
+          allOf:
+          - $ref: '#/components/schemas/ResourceEnum'
+          readOnly: true
+        portfolio_id:
+          type: string
+          format: uuid
+          readOnly: true
+        requested_start:
+          type: string
+          format: date
+          readOnly: true
+        requested_end_exclusive:
+          type: string
+          format: date
+          readOnly: true
+        asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        symbol:
+          type: string
+          readOnly: true
+          nullable: true
+        observation_date:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+      required:
+      - asset_id
+      - observation_date
+      - portfolio_id
+      - requested_end_exclusive
+      - requested_start
+      - resource
+      - symbol
+    DashboardReviewFilters:
+      type: object
+      description: Filters applied to the detail-item collection.
+      properties:
+        severity:
+          type: string
+          readOnly: true
+          nullable: true
+        category:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - category
+      - severity
+    DashboardReviewItem:
+      type: object
+      description: One stable alert/review-item transport contract.
+      properties:
+        key:
+          type: string
+          readOnly: true
+        source:
+          allOf:
+          - $ref: '#/components/schemas/SourceEnum'
+          readOnly: true
+        severity:
+          allOf:
+          - $ref: '#/components/schemas/SeverityEnum'
+          readOnly: true
+        category:
+          allOf:
+          - $ref: '#/components/schemas/CategoryEnum'
+          readOnly: true
+        code:
+          type: string
+          readOnly: true
+        message:
+          type: string
+          readOnly: true
+        drilldown:
+          allOf:
+          - $ref: '#/components/schemas/DashboardReviewDrilldown'
+          readOnly: true
+      required:
+      - category
+      - code
+      - drilldown
+      - key
+      - message
+      - severity
+      - source
+    DashboardReviewItemsResult:
+      type: object
+      description: Complete dashboard review-items response.
+      properties:
+        counts:
+          allOf:
+          - $ref: '#/components/schemas/DashboardReviewCounts'
+          readOnly: true
+        filtered_count:
+          type: integer
+          readOnly: true
+        filters:
+          allOf:
+          - $ref: '#/components/schemas/DashboardReviewFilters'
+          readOnly: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardReviewItem'
+          readOnly: true
+        provenance:
+          allOf:
+          - $ref: '#/components/schemas/DashboardReviewProvenance'
+          readOnly: true
+      required:
+      - counts
+      - filtered_count
+      - filters
+      - items
+      - provenance
+    DashboardReviewProvenance:
+      type: object
+      description: Calculation and source provenance for review-item aggregation.
+      properties:
+        portfolio_id:
+          type: string
+          format: uuid
+          readOnly: true
+        base_currency:
+          type: string
+          readOnly: true
+        provider:
+          type: string
+          readOnly: true
+        requested_start:
+          type: string
+          format: date
+          readOnly: true
+        requested_end_exclusive:
+          type: string
+          format: date
+          readOnly: true
+        effective_start:
+          type: string
+          format: date
+          readOnly: true
+        effective_end_exclusive:
+          type: string
+          format: date
+          readOnly: true
+        current_data_as_of:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        historical_data_as_of:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        analytics_as_of_date:
+          type: string
+          format: date
+          readOnly: true
+        calculated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        engine_version:
+          type: string
+          readOnly: true
+        included_sources:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        ordering_rule:
+          type: string
+          readOnly: true
+      required:
+      - analytics_as_of_date
+      - base_currency
+      - calculated_at
+      - current_data_as_of
+      - effective_end_exclusive
+      - effective_start
+      - engine_version
+      - historical_data_as_of
+      - included_sources
+      - ordering_rule
+      - portfolio_id
+      - provider
+      - requested_end_exclusive
+      - requested_start
     EngineWarning:
       type: object
       description: Common representation for quantitative-engine warning objects.
@@ -2724,6 +3049,16 @@ components:
       - source
       - trade_date
       - volume
+    ResourceEnum:
+      enum:
+      - HOLDINGS
+      - PERFORMANCE
+      - ANALYTICS
+      type: string
+      description: |-
+        * `HOLDINGS` - HOLDINGS
+        * `PERFORMANCE` - PERFORMANCE
+        * `ANALYTICS` - ANALYTICS
     SecurityAllocation:
       type: object
       description: One current security allocation.
@@ -2744,6 +3079,16 @@ components:
       - asset_id
       - market_value
       - weight
+    SeverityEnum:
+      enum:
+      - ERROR
+      - WARNING
+      - INFO
+      type: string
+      description: |-
+        * `ERROR` - ERROR
+        * `WARNING` - WARNING
+        * `INFO` - INFO
     SharpeRatioResult:
       type: object
       description: Sharpe result including explicit risk-free assumptions.
@@ -2820,6 +3165,16 @@ components:
       - observations
       - value
       - warnings
+    SourceEnum:
+      enum:
+      - CURRENT_VALUATION
+      - DAILY_PERFORMANCE
+      - ANALYTICS
+      type: string
+      description: |-
+        * `CURRENT_VALUATION` - CURRENT_VALUATION
+        * `DAILY_PERFORMANCE` - DAILY_PERFORMANCE
+        * `ANALYTICS` - ANALYTICS
     StatusEnum:
       enum:
       - SUCCEEDED

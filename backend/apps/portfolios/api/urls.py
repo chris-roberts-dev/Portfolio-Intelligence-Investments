@@ -14,6 +14,9 @@ from apps.portfolios.api.movers_views import (
 from apps.portfolios.api.performance_views import (
     portfolio_performance_view,
 )
+from apps.portfolios.api.review_items_views import (
+    portfolio_dashboard_review_items_view,
+)
 from apps.portfolios.api.summary_views import (
     portfolio_dashboard_summary_view,
 )
@@ -59,6 +62,11 @@ urlpatterns = [
         "portfolios/<uuid:portfolio_id>/performance/",
         portfolio_performance_view,
         name="api-v1-portfolio-performance",
+    ),
+    path(
+        "portfolios/<uuid:portfolio_id>/review-items/",
+        portfolio_dashboard_review_items_view,
+        name="api-v1-portfolio-dashboard-review-items",
     ),
     path(
         "portfolios/<uuid:portfolio_id>/summary/",
