@@ -1,6 +1,6 @@
 COMPOSE := docker compose
 
-.PHONY: bootstrap-env up down logs backend-shell db-shell check lint format-check typecheck test lock market-data-offline-demo market-data-live-smoke
+.PHONY: bootstrap-env up down logs backend-shell db-shell check lint format-check typecheck test lock market-data-offline-demo market-data-live-smoke openapi verify check
 
 bootstrap-env:
 	@test -f .env || cp .env.example .env
@@ -53,3 +53,6 @@ market-data-offline-demo:
 
 market-data-live-smoke:
 	cd backend && uv run python -m scripts.market_data_live_smoke
+
+verify: 
+	@bash scripts/verify.sh

@@ -16,3 +16,5 @@ htmlcov/
 .vscode/
 
 frontend/node_modules/
+scripts/consolidate_project.py
+docs/project-consolidated.md

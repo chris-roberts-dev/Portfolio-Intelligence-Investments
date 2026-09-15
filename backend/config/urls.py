@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularSwaggerView,
@@ -17,6 +17,10 @@ urlpatterns = [
         "api/v1/market-data/bars/query/",
         market_bar_query_view,
         name="api-v1-market-data-bars-query",
+    ),
+    path(
+        "api/v1/",
+        include("apps.portfolios.api.urls"),
     ),
     path(
         "api/v1/schema/",
