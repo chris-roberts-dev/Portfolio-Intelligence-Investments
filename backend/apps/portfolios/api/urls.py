@@ -2,6 +2,9 @@
 
 from django.urls import path
 
+from apps.portfolios.api.allocation_views import (
+    portfolio_dashboard_allocation_view,
+)
 from apps.portfolios.api.holdings_dashboard_views import (
     portfolio_dashboard_holdings_view,
 )
@@ -31,6 +34,11 @@ urlpatterns = [
         "portfolios/<uuid:portfolio_id>/",
         portfolio_detail_view,
         name="api-v1-portfolio-detail",
+    ),
+    path(
+        "portfolios/<uuid:portfolio_id>/allocation/",
+        portfolio_dashboard_allocation_view,
+        name="api-v1-portfolio-dashboard-allocation",
     ),
     path(
         "portfolios/<uuid:portfolio_id>/holdings/",

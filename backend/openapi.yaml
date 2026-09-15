@@ -197,6 +197,64 @@ paths:
               schema:
                 $ref: '#/components/schemas/PortfolioApiError'
           description: The portfolio does not exist in the authenticated user's scope.
+  /api/v1/portfolios/{portfolio_id}/allocation/:
+    get:
+      operationId: portfolio_dashboard_allocation
+      description: Return the P0 current portfolio asset-class allocation using authoritative
+        valuation/allocation weights, explicit cash, deterministic ordering, and disclosed
+        grouping rules.
+      parameters:
+      - in: path
+        name: portfolio_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: provider
+        schema:
+          type: string
+          nullable: true
+          minLength: 1
+      tags:
+      - portfolios
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardAllocationResult'
+          description: Dashboard-ready current allocation.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioValidationError'
+          description: Provider-selection validation failed.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The selected non-default provider is not authorized.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The portfolio does not exist in the authenticated user's scope.
+        '429':
+          description: The provider-backed read throttle was exceeded.
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: A required provider, calendar, valuation, or allocation dependency
+            failed.
   /api/v1/portfolios/{portfolio_id}/holdings/:
     get:
       operationId: portfolio_current_holdings
@@ -1002,6 +1060,186 @@ components:
         * `PRICE_PROVIDER_FAILED` - PRICE_PROVIDER_FAILED
         * `PRICE_TOO_STALE` - PRICE_TOO_STALE
         * `PRICE_DATE_OUTSIDE_SESSION_CALENDAR` - PRICE_DATE_OUTSIDE_SESSION_CALENDAR
+    DashboardAllocationGroup:
+      type: object
+      description: One display-ready asset-class or cash allocation segment.
+      properties:
+        key:
+          type: string
+          readOnly: true
+        label:
+          type: string
+          readOnly: true
+        is_cash:
+          type: boolean
+          readOnly: true
+        asset_count:
+          type: integer
+          readOnly: true
+        market_value:
+          type: string
+          readOnly: true
+        weight:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+      required:
+      - asset_count
+      - is_cash
+      - key
+      - label
+      - market_value
+      - weight
+    DashboardAllocationProvenance:
+      type: object
+      description: Current-pricing and grouping provenance.
+      properties:
+        portfolio_id:
+          type: string
+          format: uuid
+          readOnly: true
+        base_currency:
+          type: string
+          readOnly: true
+        provider:
+          type: string
+          readOnly: true
+        as_of:
+          type: string
+          format: date-time
+          readOnly: true
+        data_as_of:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        calculated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        price_field:
+          type: string
+          readOnly: true
+        grouping_dimension:
+          type: string
+          readOnly: true
+        supported_grouping_dimensions:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        grouping_source:
+          type: string
+          readOnly: true
+        ordering_rule:
+          type: string
+          readOnly: true
+        other_grouping_applied:
+          type: boolean
+          readOnly: true
+        other_grouping_threshold:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        other_grouping_rule:
+          type: string
+          readOnly: true
+        weight_sum_tolerance:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - as_of
+      - base_currency
+      - calculated_at
+      - data_as_of
+      - grouping_dimension
+      - grouping_source
+      - ordering_rule
+      - other_grouping_applied
+      - other_grouping_rule
+      - other_grouping_threshold
+      - portfolio_id
+      - price_field
+      - provider
+      - supported_grouping_dimensions
+      - weight_sum_tolerance
+    DashboardAllocationResult:
+      type: object
+      description: Complete P0 allocation-card backend contract.
+      properties:
+        allocation_available:
+          type: boolean
+          readOnly: true
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardAllocationGroup'
+          readOnly: true
+        totals:
+          allOf:
+          - $ref: '#/components/schemas/DashboardAllocationTotals'
+          readOnly: true
+        data_quality:
+          allOf:
+          - $ref: '#/components/schemas/PerformanceDataQualityEnum'
+          readOnly: true
+        unavailable_reason:
+          readOnly: true
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/UnavailableReasonEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        warnings:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        provenance:
+          allOf:
+          - $ref: '#/components/schemas/DashboardAllocationProvenance'
+          readOnly: true
+      required:
+      - allocation_available
+      - data_quality
+      - groups
+      - provenance
+      - totals
+      - unavailable_reason
+      - warnings
+    DashboardAllocationTotals:
+      type: object
+      description: Current invested/cash totals for the allocation card.
+      properties:
+        total_market_value:
+          type: string
+          readOnly: true
+          nullable: true
+        invested_value:
+          type: string
+          readOnly: true
+          nullable: true
+        cash_value:
+          type: string
+          readOnly: true
+        invested_weight:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        cash_weight:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+      required:
+      - cash_value
+      - cash_weight
+      - invested_value
+      - invested_weight
+      - total_market_value
     DashboardHolding:
       type: object
       description: One dashboard-ready current holding.
@@ -2594,6 +2832,14 @@ components:
         * `NOT_FOUND` - NOT_FOUND
         * `NO_DATA` - NO_DATA
         * `FAILED` - FAILED
+    UnavailableReasonEnum:
+      enum:
+      - CURRENT_VALUATION_INCOMPLETE
+      - CURRENT_ALLOCATION_UNAVAILABLE
+      type: string
+      description: |-
+        * `CURRENT_VALUATION_INCOMPLETE` - CURRENT_VALUATION_INCOMPLETE
+        * `CURRENT_ALLOCATION_UNAVAILABLE` - CURRENT_ALLOCATION_UNAVAILABLE
   securitySchemes:
     basicAuth:
       type: http
