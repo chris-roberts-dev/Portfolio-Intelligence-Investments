@@ -136,5 +136,8 @@ SPECTACULAR_SETTINGS = {
         "PerformanceDataQualityEnum": (
             "apps.portfolios.services.dashboard_performance.PerformanceDataQualityState"
         ),
+        "HoldingMetricUnavailableReasonEnum": (
+            "apps.portfolios.services.dashboard_holdings.HoldingMetricUnavailableReason"
+        ),
     },
 }

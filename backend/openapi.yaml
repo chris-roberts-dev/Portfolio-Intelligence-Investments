@@ -253,6 +253,75 @@ paths:
               schema:
                 $ref: '#/components/schemas/PortfolioApiError'
           description: A required provider or valuation dependency is unavailable.
+  /api/v1/portfolios/{portfolio_id}/holdings/dashboard/:
+    get:
+      operationId: portfolio_dashboard_holdings
+      description: Return display-ready current holdings with exact-date selected-period
+        adjusted-close movement and non-interpolated sparkline points.
+      parameters:
+      - in: query
+        name: end
+        schema:
+          type: string
+          format: date
+        required: true
+      - in: path
+        name: portfolio_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: provider
+        schema:
+          type: string
+          nullable: true
+          minLength: 1
+      - in: query
+        name: start
+        schema:
+          type: string
+          format: date
+        required: true
+      tags:
+      - portfolios
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardHoldingsResult'
+          description: Dashboard-ready owned-portfolio holdings.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioValidationError'
+          description: Date-range or provider-selection validation failed.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The selected non-default provider is not authorized.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The portfolio does not exist in the authenticated user's scope.
+        '429':
+          description: The provider-backed read throttle was exceeded.
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: A required provider, calendar, valuation, or history dependency
+            failed.
   /api/v1/portfolios/{portfolio_id}/performance/:
     get:
       operationId: portfolio_performance
@@ -787,6 +856,237 @@ components:
         * `PRICE_PROVIDER_FAILED` - PRICE_PROVIDER_FAILED
         * `PRICE_TOO_STALE` - PRICE_TOO_STALE
         * `PRICE_DATE_OUTSIDE_SESSION_CALENDAR` - PRICE_DATE_OUTSIDE_SESSION_CALENDAR
+    DashboardHolding:
+      type: object
+      description: One dashboard-ready current holding.
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        symbol:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        asset_type:
+          type: string
+          readOnly: true
+        currency:
+          type: string
+          readOnly: true
+        quantity:
+          type: string
+          readOnly: true
+        current_price:
+          type: string
+          readOnly: true
+          nullable: true
+        current_price_date:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        current_price_retrieved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        stale_trading_sessions:
+          type: integer
+          readOnly: true
+          nullable: true
+        market_value:
+          type: string
+          readOnly: true
+          nullable: true
+        weight:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        weight_unavailable_reason:
+          readOnly: true
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/HoldingMetricUnavailableReasonEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        selected_period_return:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        selected_period_return_unavailable_reason:
+          readOnly: true
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/HoldingMetricUnavailableReasonEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        contribution_to_return:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        contribution_unavailable_reason:
+          readOnly: true
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/HoldingMetricUnavailableReasonEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        sparkline:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldingSparklinePoint'
+          readOnly: true
+        data_quality:
+          allOf:
+          - $ref: '#/components/schemas/PerformanceDataQualityEnum'
+          readOnly: true
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardHoldingWarning'
+          readOnly: true
+      required:
+      - asset_id
+      - asset_type
+      - contribution_to_return
+      - contribution_unavailable_reason
+      - currency
+      - current_price
+      - current_price_date
+      - current_price_retrieved_at
+      - data_quality
+      - market_value
+      - name
+      - quantity
+      - selected_period_return
+      - selected_period_return_unavailable_reason
+      - sparkline
+      - stale_trading_sessions
+      - symbol
+      - warnings
+      - weight
+      - weight_unavailable_reason
+    DashboardHoldingWarning:
+      type: object
+      description: One structured holding-level data-quality warning.
+      properties:
+        code:
+          type: string
+          readOnly: true
+        message:
+          type: string
+          readOnly: true
+        asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        symbol:
+          type: string
+          readOnly: true
+        observation_date:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+      required:
+      - asset_id
+      - code
+      - message
+      - observation_date
+      - symbol
+    DashboardHoldingsProvenance:
+      type: object
+      description: Current and selected-period holdings provenance.
+      properties:
+        portfolio_id:
+          type: string
+          format: uuid
+          readOnly: true
+        base_currency:
+          type: string
+          readOnly: true
+        provider:
+          type: string
+          readOnly: true
+        requested_start:
+          type: string
+          format: date
+          readOnly: true
+        requested_end_exclusive:
+          type: string
+          format: date
+          readOnly: true
+        effective_start:
+          type: string
+          format: date
+          readOnly: true
+        effective_end_exclusive:
+          type: string
+          format: date
+          readOnly: true
+        current_price_as_of:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        period_data_as_of:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        calculated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        current_price_field:
+          type: string
+          readOnly: true
+        period_price_field:
+          type: string
+          readOnly: true
+      required:
+      - base_currency
+      - calculated_at
+      - current_price_as_of
+      - current_price_field
+      - effective_end_exclusive
+      - effective_start
+      - period_data_as_of
+      - period_price_field
+      - portfolio_id
+      - provider
+      - requested_end_exclusive
+      - requested_start
+    DashboardHoldingsResult:
+      type: object
+      description: Complete P0 dashboard holdings response contract.
+      properties:
+        holdings:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardHolding'
+          readOnly: true
+        data_quality:
+          allOf:
+          - $ref: '#/components/schemas/PerformanceDataQualityEnum'
+          readOnly: true
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardHoldingWarning'
+          readOnly: true
+        provenance:
+          allOf:
+          - $ref: '#/components/schemas/DashboardHoldingsProvenance'
+          readOnly: true
+      required:
+      - data_quality
+      - holdings
+      - provenance
+      - warnings
     DashboardPerformanceProvenance:
       type: object
       description: Requested/effective ranges plus data/calculation provenance.
@@ -952,6 +1252,37 @@ components:
           readOnly: true
       required:
       - status
+    HoldingMetricUnavailableReasonEnum:
+      enum:
+      - CURRENT_PRICE_UNAVAILABLE
+      - PERIOD_HISTORY_UNAVAILABLE
+      - PERIOD_START_PRICE_UNAVAILABLE
+      - PERIOD_END_PRICE_UNAVAILABLE
+      - CURRENT_ALLOCATION_UNAVAILABLE
+      - CONTRIBUTION_NOT_CALCULATED
+      type: string
+      description: |-
+        * `CURRENT_PRICE_UNAVAILABLE` - CURRENT_PRICE_UNAVAILABLE
+        * `PERIOD_HISTORY_UNAVAILABLE` - PERIOD_HISTORY_UNAVAILABLE
+        * `PERIOD_START_PRICE_UNAVAILABLE` - PERIOD_START_PRICE_UNAVAILABLE
+        * `PERIOD_END_PRICE_UNAVAILABLE` - PERIOD_END_PRICE_UNAVAILABLE
+        * `CURRENT_ALLOCATION_UNAVAILABLE` - CURRENT_ALLOCATION_UNAVAILABLE
+        * `CONTRIBUTION_NOT_CALCULATED` - CONTRIBUTION_NOT_CALCULATED
+    HoldingSparklinePoint:
+      type: object
+      description: One exact-date adjusted-close point; missing data stays null.
+      properties:
+        observation_date:
+          type: string
+          format: date
+          readOnly: true
+        adjusted_close:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - adjusted_close
+      - observation_date
     IntervalEnum:
       enum:
       - 1d
