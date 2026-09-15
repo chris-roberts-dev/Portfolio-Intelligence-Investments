@@ -21,6 +21,11 @@ const HoldingsPanel = lazy(async () => {
   return { default: module.HoldingsPanel };
 });
 
+const MoversPanel = lazy(async () => {
+  const module = await import("./MoversPanel");
+  return { default: module.MoversPanel };
+});
+
 interface DashboardOverviewProps {
   snapshot: DashboardSnapshotResult | undefined;
   isLoading: boolean;
@@ -81,6 +86,29 @@ function AllocationSkeleton() {
         ))}
       </div>
       <Skeleton className="mt-6 h-40 w-full" />
+    </section>
+  );
+}
+
+function MoversSkeleton() {
+  return (
+    <section
+      className="min-h-[26rem] rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+      aria-label="Loading movers"
+    >
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <Skeleton className="h-3 w-32" />
+          <Skeleton className="mt-3 h-6 w-28" />
+        </div>
+        <Skeleton className="h-8 w-24" />
+      </div>
+      <Skeleton className="mt-6 h-11 w-full" />
+      <div className="mt-5 grid gap-3 lg:grid-cols-2">
+        {Array.from({ length: 4 }, (_, index) => (
+          <Skeleton key={index} className="h-40 w-full" />
+        ))}
+      </div>
     </section>
   );
 }
@@ -158,17 +186,19 @@ export function DashboardOverview({
   const summaryError = moduleError(snapshot, "SUMMARY");
   const allocationError = moduleError(snapshot, "ALLOCATION");
   const holdingsError = moduleError(snapshot, "HOLDINGS");
+  const moversError = moduleError(snapshot, "MOVERS");
   const hasUsableDashboard =
     snapshot.performance !== null ||
     snapshot.summary !== null ||
     snapshot.allocation !== null ||
-    snapshot.holdings !== null;
+    snapshot.holdings !== null ||
+    snapshot.movers !== null;
 
   if (!hasUsableDashboard) {
     return (
       <StatePanel
         title="Portfolio data is not available yet"
-        message="The dashboard snapshot loaded, but the performance, summary, allocation, and holdings modules are unavailable for the selected period."
+        message="The dashboard snapshot loaded, but the performance, summary, allocation, holdings, and movers modules are unavailable for the selected period."
       />
     );
   }
@@ -229,6 +259,18 @@ export function DashboardOverview({
               currency={snapshot.snapshot.base_currency}
               portfolioId={snapshot.snapshot.portfolio_id}
               moduleError={holdingsError}
+            />
+          </Suspense>
+        </LazySection>
+      </div>
+
+      <div className="mt-5">
+        <LazySection fallback={<MoversSkeleton />}>
+          <Suspense fallback={<MoversSkeleton />}>
+            <MoversPanel
+              movers={snapshot.movers}
+              portfolioId={snapshot.snapshot.portfolio_id}
+              moduleError={moversError}
             />
           </Suspense>
         </LazySection>

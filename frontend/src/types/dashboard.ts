@@ -276,6 +276,75 @@ export interface DashboardHoldingsResult {
   provenance: DashboardHoldingsProvenance;
 }
 
+export type MoversAttributionStatus = "AVAILABLE" | "UNAVAILABLE";
+
+export type MoversAttributionUnavailableReason =
+  | "PORTFOLIO_TWR_UNAVAILABLE";
+
+export type MoverUnavailableReason =
+  | "NOT_CURRENT_HOLDING"
+  | "SELECTED_PERIOD_RETURN_UNAVAILABLE"
+  | "CONTRIBUTION_UNAVAILABLE";
+
+export interface DashboardMover {
+  asset_id: string;
+  symbol: string;
+  name: string;
+  asset_type: string;
+  currency: string;
+  is_current_holding: boolean;
+  quantity: string | null;
+  current_price: string | null;
+  current_price_date: string | null;
+  current_price_retrieved_at: string | null;
+  stale_trading_sessions: number | null;
+  market_value: string | null;
+  weight: number | null;
+  selected_period_return: number | null;
+  contribution_to_return: number | null;
+  sparkline: HoldingSparklinePoint[];
+  data_quality: PerformanceDataQuality;
+  unavailable_reasons: MoverUnavailableReason[];
+}
+
+export interface MoversReconciliation {
+  status: MoversAttributionStatus;
+  periods: number;
+  cumulative_return: number | null;
+  asset_contribution_total: number | null;
+  unattributed_contribution: number | null;
+  reconciliation_error: number | null;
+  unavailable_reason: MoversAttributionUnavailableReason | null;
+}
+
+export interface DashboardMoversProvenance {
+  portfolio_id: string;
+  base_currency: string;
+  provider: string;
+  requested_start: string;
+  requested_end_exclusive: string;
+  effective_start: string;
+  effective_end_exclusive: string;
+  current_price_as_of: string | null;
+  period_data_as_of: string | null;
+  calculated_at: string;
+  current_price_field: string;
+  period_price_field: string;
+  attribution_method: string;
+  engine_version: string;
+}
+
+export interface DashboardMoversResult {
+  top_gainers: DashboardMover[];
+  top_losers: DashboardMover[];
+  largest_contributors: DashboardMover[];
+  largest_detractors: DashboardMover[];
+  reconciliation: MoversReconciliation;
+  data_quality: PerformanceDataQuality;
+  warnings: string[];
+  provenance: DashboardMoversProvenance;
+}
+
 export interface DashboardSnapshotResult {
   snapshot: DashboardSnapshotContext;
   is_complete: boolean;
@@ -284,7 +353,7 @@ export interface DashboardSnapshotResult {
   performance: DashboardPerformanceResult | null;
   allocation: DashboardAllocationResult | null;
   holdings: DashboardHoldingsResult | null;
-  movers: unknown | null;
+  movers: DashboardMoversResult | null;
   analytics: unknown | null;
   review_items: unknown | null;
 }

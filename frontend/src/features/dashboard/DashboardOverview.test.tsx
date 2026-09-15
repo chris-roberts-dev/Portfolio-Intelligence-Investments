@@ -15,6 +15,10 @@ vi.mock("./HoldingsPanel", () => ({
   HoldingsPanel: () => <div data-testid="holdings-panel">Holdings panel</div>,
 }));
 
+vi.mock("./MoversPanel", () => ({
+  MoversPanel: () => <div data-testid="movers-panel">Movers panel</div>,
+}));
+
 function snapshotFixture(): DashboardSnapshotResult {
   return {
     snapshot: {
@@ -55,6 +59,12 @@ function snapshotFixture(): DashboardSnapshotResult {
       },
       {
         module: "HOLDINGS",
+        status: "AVAILABLE",
+        error_code: null,
+        detail: null,
+      },
+      {
+        module: "MOVERS",
         status: "AVAILABLE",
         error_code: null,
         detail: null,
@@ -213,14 +223,46 @@ function snapshotFixture(): DashboardSnapshotResult {
         period_price_field: "adjusted_close",
       },
     },
-    movers: null,
+    movers: {
+      top_gainers: [],
+      top_losers: [],
+      largest_contributors: [],
+      largest_detractors: [],
+      reconciliation: {
+        status: "AVAILABLE",
+        periods: 1,
+        cumulative_return: 0.1,
+        asset_contribution_total: 0.1,
+        unattributed_contribution: 0,
+        reconciliation_error: 0,
+        unavailable_reason: null,
+      },
+      data_quality: "CURRENT",
+      warnings: [],
+      provenance: {
+        portfolio_id: "00000000-0000-0000-0000-000000000002",
+        base_currency: "USD",
+        provider: "mock",
+        requested_start: "2026-09-01",
+        requested_end_exclusive: "2026-09-16",
+        effective_start: "2026-09-01",
+        effective_end_exclusive: "2026-09-16",
+        current_price_as_of: "2026-09-15T21:55:00Z",
+        period_data_as_of: "2026-09-15T21:55:00Z",
+        calculated_at: "2026-09-15T22:00:00Z",
+        current_price_field: "close",
+        period_price_field: "adjusted_close",
+        attribution_method: "ASSET_PNL_WEALTH_LINKED_V1",
+        engine_version: "0.1.0.dev0",
+      },
+    },
     analytics: null,
     review_items: null,
   };
 }
 
 describe("DashboardOverview", () => {
-  it("renders canonical performance, summary, allocation, and lazy holdings values", async () => {
+  it("renders performance, summary, allocation, holdings, and movers values", async () => {
     render(
       <DashboardOverview
         snapshot={snapshotFixture()}
@@ -243,6 +285,9 @@ describe("DashboardOverview", () => {
     ).toBeInTheDocument();
     expect(
       await screen.findByTestId("holdings-panel"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("movers-panel"),
     ).toBeInTheDocument();
   });
 
