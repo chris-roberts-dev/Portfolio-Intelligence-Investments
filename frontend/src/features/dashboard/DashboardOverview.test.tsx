@@ -7,6 +7,10 @@ vi.mock("../../components/charts/PerformanceChart", () => ({
   PerformanceChart: () => <div data-testid="performance-chart">Chart</div>,
 }));
 
+vi.mock("./AllocationPanel", () => ({
+  AllocationPanel: () => <div data-testid="allocation-panel">Allocation panel</div>,
+}));
+
 vi.mock("./HoldingsPanel", () => ({
   HoldingsPanel: () => <div data-testid="holdings-panel">Holdings panel</div>,
 }));
@@ -39,6 +43,12 @@ function snapshotFixture(): DashboardSnapshotResult {
       },
       {
         module: "PERFORMANCE",
+        status: "AVAILABLE",
+        error_code: null,
+        detail: null,
+      },
+      {
+        module: "ALLOCATION",
         status: "AVAILABLE",
         error_code: null,
         detail: null,
@@ -136,7 +146,54 @@ function snapshotFixture(): DashboardSnapshotResult {
           "REQUESTED_RANGE_INTERSECTED_WITH_LEDGER_AS_OF",
       },
     },
-    allocation: null,
+    allocation: {
+      allocation_available: true,
+      groups: [
+        {
+          key: "STOCK",
+          label: "Stocks",
+          is_cash: false,
+          asset_count: 1,
+          market_value: "1000.00",
+          weight: 0.9090909091,
+        },
+        {
+          key: "CASH",
+          label: "Cash",
+          is_cash: true,
+          asset_count: 0,
+          market_value: "100.00",
+          weight: 0.0909090909,
+        },
+      ],
+      totals: {
+        total_market_value: "1100.00",
+        invested_value: "1000.00",
+        cash_value: "100.00",
+        invested_weight: 0.9090909091,
+        cash_weight: 0.0909090909,
+      },
+      data_quality: "CURRENT",
+      unavailable_reason: null,
+      warnings: [],
+      provenance: {
+        portfolio_id: "00000000-0000-0000-0000-000000000002",
+        base_currency: "USD",
+        provider: "mock",
+        as_of: "2026-09-15T22:00:00Z",
+        data_as_of: "2026-09-15T21:55:00Z",
+        calculated_at: "2026-09-15T22:00:00Z",
+        price_field: "close",
+        grouping_dimension: "ASSET_CLASS",
+        supported_grouping_dimensions: ["ASSET_CLASS"],
+        grouping_source: "Asset.asset_type",
+        ordering_rule: "SECURITY_WEIGHT_DESC_THEN_GROUP_KEY_CASH_LAST_V1",
+        other_grouping_applied: false,
+        other_grouping_threshold: null,
+        other_grouping_rule: "No Other aggregation is applied in the MVP.",
+        weight_sum_tolerance: 1e-8,
+      },
+    },
     holdings: {
       holdings: [],
       data_quality: "CURRENT",
@@ -163,7 +220,7 @@ function snapshotFixture(): DashboardSnapshotResult {
 }
 
 describe("DashboardOverview", () => {
-  it("renders canonical performance, summary, and lazy holdings values", async () => {
+  it("renders canonical performance, summary, allocation, and lazy holdings values", async () => {
     render(
       <DashboardOverview
         snapshot={snapshotFixture()}
@@ -180,6 +237,9 @@ describe("DashboardOverview", () => {
 
     expect(
       await screen.findByTestId("performance-chart"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("allocation-panel"),
     ).toBeInTheDocument();
     expect(
       await screen.findByTestId("holdings-panel"),

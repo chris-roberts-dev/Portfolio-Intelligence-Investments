@@ -156,6 +156,60 @@ export interface DashboardPortfolioSummaryResult {
   provenance: DashboardPortfolioSummaryProvenance;
 }
 
+export type DashboardAllocationUnavailableReason =
+  | "CURRENT_VALUATION_INCOMPLETE"
+  | "CURRENT_ALLOCATION_UNAVAILABLE";
+
+export interface DashboardAllocationGroup {
+  key: string;
+  label: string;
+  is_cash: boolean;
+  asset_count: number;
+  market_value: string;
+  weight: number | null;
+}
+
+export interface DashboardAllocationTotals {
+  total_market_value: string | null;
+  invested_value: string | null;
+  cash_value: string;
+  invested_weight: number | null;
+  cash_weight: number | null;
+}
+
+export interface DashboardAllocationProvenance {
+  portfolio_id: string;
+  base_currency: string;
+  provider: string;
+  as_of: string;
+  data_as_of: string | null;
+  calculated_at: string;
+  price_field: string;
+  grouping_dimension: string;
+  supported_grouping_dimensions: string[];
+  grouping_source: string;
+  ordering_rule: string;
+  other_grouping_applied: boolean;
+  other_grouping_threshold: number | null;
+  other_grouping_rule: string;
+  weight_sum_tolerance: number;
+}
+
+export interface DashboardAllocationResult {
+  allocation_available: boolean;
+  groups: DashboardAllocationGroup[];
+  totals: DashboardAllocationTotals;
+  data_quality: PerformanceDataQuality;
+  unavailable_reason: DashboardAllocationUnavailableReason | null;
+  warnings: string[];
+  provenance: DashboardAllocationProvenance;
+}
+
+export interface AllocationGroupSelection {
+  grouping_dimension: string;
+  group_key: string;
+}
+
 export type HoldingMetricUnavailableReason =
   | "CURRENT_PRICE_UNAVAILABLE"
   | "PERIOD_HISTORY_UNAVAILABLE"
@@ -228,7 +282,7 @@ export interface DashboardSnapshotResult {
   modules: DashboardSnapshotModuleState[];
   summary: DashboardPortfolioSummaryResult | null;
   performance: DashboardPerformanceResult | null;
-  allocation: unknown | null;
+  allocation: DashboardAllocationResult | null;
   holdings: DashboardHoldingsResult | null;
   movers: unknown | null;
   analytics: unknown | null;

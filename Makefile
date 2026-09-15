@@ -56,3 +56,6 @@ market-data-live-smoke:
 
 verify: 
 	@bash scripts/verify.sh
+
+createsuperuser: 
+	docker compose exec backend uv run python manage.py createsuperuser --settings=config.settings.dev

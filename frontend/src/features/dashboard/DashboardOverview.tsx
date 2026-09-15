@@ -11,6 +11,11 @@ import type {
 import { PerformanceHero } from "./PerformanceHero";
 import { PortfolioSummaryCard } from "./PortfolioSummaryCard";
 
+const AllocationPanel = lazy(async () => {
+  const module = await import("./AllocationPanel");
+  return { default: module.AllocationPanel };
+});
+
 const HoldingsPanel = lazy(async () => {
   const module = await import("./HoldingsPanel");
   return { default: module.HoldingsPanel };
@@ -54,6 +59,29 @@ function DashboardSkeleton() {
         </div>
       </section>
     </div>
+  );
+}
+
+function AllocationSkeleton() {
+  return (
+    <section
+      className="min-h-[24rem] rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+      aria-label="Loading allocation"
+    >
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <Skeleton className="h-3 w-28" />
+          <Skeleton className="mt-3 h-6 w-36" />
+        </div>
+        <Skeleton className="h-8 w-24" />
+      </div>
+      <div className="mt-6 grid gap-3 sm:grid-cols-3">
+        {Array.from({ length: 3 }, (_, index) => (
+          <Skeleton key={index} className="h-24 w-full" />
+        ))}
+      </div>
+      <Skeleton className="mt-6 h-40 w-full" />
+    </section>
   );
 }
 
@@ -128,17 +156,19 @@ export function DashboardOverview({
 
   const performanceError = moduleError(snapshot, "PERFORMANCE");
   const summaryError = moduleError(snapshot, "SUMMARY");
+  const allocationError = moduleError(snapshot, "ALLOCATION");
   const holdingsError = moduleError(snapshot, "HOLDINGS");
   const hasUsableDashboard =
     snapshot.performance !== null ||
     snapshot.summary !== null ||
+    snapshot.allocation !== null ||
     snapshot.holdings !== null;
 
   if (!hasUsableDashboard) {
     return (
       <StatePanel
         title="Portfolio data is not available yet"
-        message="The dashboard snapshot loaded, but the performance, summary, and holdings modules are unavailable for the selected period."
+        message="The dashboard snapshot loaded, but the performance, summary, allocation, and holdings modules are unavailable for the selected period."
       />
     );
   }
@@ -179,6 +209,16 @@ export function DashboardOverview({
             moduleError={summaryError}
           />
         </div>
+      </div>
+
+      <div className="mt-5">
+        <Suspense fallback={<AllocationSkeleton />}>
+          <AllocationPanel
+            allocation={snapshot.allocation}
+            currency={snapshot.snapshot.base_currency}
+            moduleError={allocationError}
+          />
+        </Suspense>
       </div>
 
       <div className="mt-5">
