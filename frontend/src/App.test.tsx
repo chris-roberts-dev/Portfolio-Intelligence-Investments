@@ -1,19 +1,44 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 
 import { App } from "./App";
 
-describe("App", () => {
-  it("renders the Phase 1 application shell", () => {
-    render(
-      <MemoryRouter>
+function renderApp() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={["/"]}>
         <App />
-      </MemoryRouter>,
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+describe("App", () => {
+  it("renders the portfolio dashboard foundation shell", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
     );
 
+    renderApp();
+
     expect(
-      screen.getByRole("heading", { name: "Portfolio Intelligence" }),
+      screen.getByRole("heading", { name: "Select a portfolio" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Phase 1 foundation")).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: "Primary navigation" }),
+    ).toBeInTheDocument();
   });
 });
