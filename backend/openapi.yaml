@@ -322,6 +322,83 @@ paths:
                 $ref: '#/components/schemas/PortfolioApiError'
           description: A required provider, calendar, valuation, or history dependency
             failed.
+  /api/v1/portfolios/{portfolio_id}/movers/:
+    get:
+      operationId: portfolio_dashboard_movers
+      description: Return deterministic selected-period Top Gainers, Top Losers, Largest
+        Contributors, and Largest Detractors. Contribution rankings reconcile to canonical
+        portfolio TWR and include explicit residual attribution metadata.
+      parameters:
+      - in: query
+        name: end
+        schema:
+          type: string
+          format: date
+        required: true
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          maximum: 20
+          minimum: 1
+          default: 5
+      - in: path
+        name: portfolio_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: provider
+        schema:
+          type: string
+          nullable: true
+          minLength: 1
+      - in: query
+        name: start
+        schema:
+          type: string
+          format: date
+        required: true
+      tags:
+      - portfolios
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardMoversResult'
+          description: Dashboard-ready mover and contribution rankings.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioValidationError'
+          description: Date-range, limit, or provider validation failed.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The selected non-default provider is not authorized.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The portfolio does not exist in the authenticated user's scope.
+        '429':
+          description: The provider-backed read throttle was exceeded.
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: A required provider, calendar, valuation, history, or attribution
+            dependency failed.
   /api/v1/portfolios/{portfolio_id}/performance/:
     get:
       operationId: portfolio_performance
@@ -390,6 +467,75 @@ paths:
               schema:
                 $ref: '#/components/schemas/PortfolioApiError'
           description: A required provider, calendar, or performance dependency failed.
+  /api/v1/portfolios/{portfolio_id}/summary/:
+    get:
+      operationId: portfolio_dashboard_summary
+      description: Return the P0 current portfolio accounting summary using exact
+        Decimal ledger arithmetic and weighted-average analytical book cost.
+      parameters:
+      - in: query
+        name: end
+        schema:
+          type: string
+          format: date
+        required: true
+      - in: path
+        name: portfolio_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: provider
+        schema:
+          type: string
+          nullable: true
+          minLength: 1
+      - in: query
+        name: start
+        schema:
+          type: string
+          format: date
+        required: true
+      tags:
+      - portfolios
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardPortfolioSummaryResult'
+          description: Dashboard-ready accounting and valuation summary.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioValidationError'
+          description: Date-range or provider-selection validation failed.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The selected non-default provider is not authorized.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The portfolio does not exist in the authenticated user's scope.
+        '429':
+          description: The provider-backed read throttle was exceeded.
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: A required provider, calendar, valuation, or accounting dependency
+            failed.
   /api/v1/schema/:
     get:
       operationId: schema_retrieve
@@ -1087,6 +1233,224 @@ components:
       - holdings
       - provenance
       - warnings
+    DashboardMover:
+      type: object
+      description: One ranked security with current-holding and period metrics.
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        symbol:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        asset_type:
+          type: string
+          readOnly: true
+        currency:
+          type: string
+          readOnly: true
+        is_current_holding:
+          type: boolean
+          readOnly: true
+        quantity:
+          type: string
+          readOnly: true
+          nullable: true
+        current_price:
+          type: string
+          readOnly: true
+          nullable: true
+        current_price_date:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        current_price_retrieved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        stale_trading_sessions:
+          type: integer
+          readOnly: true
+          nullable: true
+        market_value:
+          type: string
+          readOnly: true
+          nullable: true
+        weight:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        selected_period_return:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        contribution_to_return:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        sparkline:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldingSparklinePoint'
+          readOnly: true
+        data_quality:
+          allOf:
+          - $ref: '#/components/schemas/PerformanceDataQualityEnum'
+          readOnly: true
+        unavailable_reasons:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - asset_id
+      - asset_type
+      - contribution_to_return
+      - currency
+      - current_price
+      - current_price_date
+      - current_price_retrieved_at
+      - data_quality
+      - is_current_holding
+      - market_value
+      - name
+      - quantity
+      - selected_period_return
+      - sparkline
+      - stale_trading_sessions
+      - symbol
+      - unavailable_reasons
+      - weight
+    DashboardMoversProvenance:
+      type: object
+      description: Provider, period, calculation, and attribution provenance.
+      properties:
+        portfolio_id:
+          type: string
+          format: uuid
+          readOnly: true
+        base_currency:
+          type: string
+          readOnly: true
+        provider:
+          type: string
+          readOnly: true
+        requested_start:
+          type: string
+          format: date
+          readOnly: true
+        requested_end_exclusive:
+          type: string
+          format: date
+          readOnly: true
+        effective_start:
+          type: string
+          format: date
+          readOnly: true
+        effective_end_exclusive:
+          type: string
+          format: date
+          readOnly: true
+        current_price_as_of:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        period_data_as_of:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        calculated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        current_price_field:
+          type: string
+          readOnly: true
+        period_price_field:
+          type: string
+          readOnly: true
+        attribution_method:
+          type: string
+          readOnly: true
+        engine_version:
+          type: string
+          readOnly: true
+      required:
+      - attribution_method
+      - base_currency
+      - calculated_at
+      - current_price_as_of
+      - current_price_field
+      - effective_end_exclusive
+      - effective_start
+      - engine_version
+      - period_data_as_of
+      - period_price_field
+      - portfolio_id
+      - provider
+      - requested_end_exclusive
+      - requested_start
+    DashboardMoversResult:
+      type: object
+      description: Complete P1 dashboard mover-ranking response.
+      properties:
+        top_gainers:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardMover'
+          readOnly: true
+        top_losers:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardMover'
+          readOnly: true
+        largest_contributors:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardMover'
+          readOnly: true
+        largest_detractors:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardMover'
+          readOnly: true
+        reconciliation:
+          allOf:
+          - $ref: '#/components/schemas/MoversReconciliation'
+          readOnly: true
+        data_quality:
+          allOf:
+          - $ref: '#/components/schemas/PerformanceDataQualityEnum'
+          readOnly: true
+        warnings:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        provenance:
+          allOf:
+          - $ref: '#/components/schemas/DashboardMoversProvenance'
+          readOnly: true
+      required:
+      - data_quality
+      - largest_contributors
+      - largest_detractors
+      - provenance
+      - reconciliation
+      - top_gainers
+      - top_losers
+      - warnings
     DashboardPerformanceProvenance:
       type: object
       description: Requested/effective ranges plus data/calculation provenance.
@@ -1230,6 +1594,179 @@ components:
       - message
       - observation_date
       - symbol
+    DashboardPortfolioSummaryMetrics:
+      type: object
+      description: Exact Decimal dashboard accounting metrics.
+      properties:
+        total_market_value:
+          type: string
+          readOnly: true
+          nullable: true
+        total_market_value_unavailable_reason:
+          readOnly: true
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/PortfolioSummaryUnavailableReasonEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        net_contributions:
+          type: string
+          readOnly: true
+        cost_basis:
+          type: string
+          readOnly: true
+        cash_balance:
+          type: string
+          readOnly: true
+        cash_percentage:
+          type: string
+          readOnly: true
+          nullable: true
+        cash_percentage_unavailable_reason:
+          readOnly: true
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/PortfolioSummaryUnavailableReasonEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        unrealized_gain_loss:
+          type: string
+          readOnly: true
+          nullable: true
+        unrealized_gain_loss_unavailable_reason:
+          readOnly: true
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/PortfolioSummaryUnavailableReasonEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        selected_period_realized_gain_loss:
+          type: string
+          readOnly: true
+          nullable: true
+        selected_period_realized_gain_loss_unavailable_reason:
+          readOnly: true
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/PortfolioSummaryUnavailableReasonEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        selected_period_income_received:
+          type: string
+          readOnly: true
+          nullable: true
+        selected_period_income_unavailable_reason:
+          readOnly: true
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/PortfolioSummaryUnavailableReasonEnum'
+          - $ref: '#/components/schemas/NullEnum'
+      required:
+      - cash_balance
+      - cash_percentage
+      - cash_percentage_unavailable_reason
+      - cost_basis
+      - net_contributions
+      - selected_period_income_received
+      - selected_period_income_unavailable_reason
+      - selected_period_realized_gain_loss
+      - selected_period_realized_gain_loss_unavailable_reason
+      - total_market_value
+      - total_market_value_unavailable_reason
+      - unrealized_gain_loss
+      - unrealized_gain_loss_unavailable_reason
+    DashboardPortfolioSummaryProvenance:
+      type: object
+      description: Accounting and current-price provenance.
+      properties:
+        portfolio_id:
+          type: string
+          format: uuid
+          readOnly: true
+        base_currency:
+          type: string
+          readOnly: true
+        provider:
+          type: string
+          readOnly: true
+        requested_start:
+          type: string
+          format: date
+          readOnly: true
+        requested_end_exclusive:
+          type: string
+          format: date
+          readOnly: true
+        ledger_as_of:
+          type: string
+          format: date-time
+          readOnly: true
+        current_price_data_as_of:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        calculated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        current_price_field:
+          type: string
+          readOnly: true
+        accounting_method:
+          type: string
+          readOnly: true
+        accounting_assumptions:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        selected_period_transaction_timezone:
+          type: string
+          readOnly: true
+        net_contributions_scope:
+          type: string
+          readOnly: true
+        selected_period_accounting_scope:
+          type: string
+          readOnly: true
+      required:
+      - accounting_assumptions
+      - accounting_method
+      - base_currency
+      - calculated_at
+      - current_price_data_as_of
+      - current_price_field
+      - ledger_as_of
+      - net_contributions_scope
+      - portfolio_id
+      - provider
+      - requested_end_exclusive
+      - requested_start
+      - selected_period_accounting_scope
+      - selected_period_transaction_timezone
+    DashboardPortfolioSummaryResult:
+      type: object
+      description: Complete P0 portfolio-summary response.
+      properties:
+        metrics:
+          allOf:
+          - $ref: '#/components/schemas/DashboardPortfolioSummaryMetrics'
+          readOnly: true
+        data_quality:
+          allOf:
+          - $ref: '#/components/schemas/PerformanceDataQualityEnum'
+          readOnly: true
+        warnings:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        provenance:
+          allOf:
+          - $ref: '#/components/schemas/DashboardPortfolioSummaryProvenance'
+          readOnly: true
+      required:
+      - data_quality
+      - metrics
+      - provenance
+      - warnings
     EngineWarning:
       type: object
       description: Common representation for quantitative-engine warning objects.
@@ -1455,6 +1992,48 @@ components:
       - trough_index
       - value
       - warnings
+    MoversReconciliation:
+      type: object
+      description: Portfolio-TWR reconciliation metadata for contribution rankings.
+      properties:
+        status:
+          type: string
+          readOnly: true
+        periods:
+          type: integer
+          readOnly: true
+        cumulative_return:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        asset_contribution_total:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        unattributed_contribution:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        reconciliation_error:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        unavailable_reason:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - asset_contribution_total
+      - cumulative_return
+      - periods
+      - reconciliation_error
+      - status
+      - unattributed_contribution
+      - unavailable_reason
     NullEnum:
       enum:
       - null
@@ -1769,6 +2348,16 @@ components:
       - id
       - name
       - updated_at
+    PortfolioSummaryUnavailableReasonEnum:
+      enum:
+      - CURRENT_VALUATION_INCOMPLETE
+      - TOTAL_MARKET_VALUE_NON_POSITIVE
+      - SELECTED_PERIOD_NOT_STARTED
+      type: string
+      description: |-
+        * `CURRENT_VALUATION_INCOMPLETE` - CURRENT_VALUATION_INCOMPLETE
+        * `TOTAL_MARKET_VALUE_NON_POSITIVE` - TOTAL_MARKET_VALUE_NON_POSITIVE
+        * `SELECTED_PERIOD_NOT_STARTED` - SELECTED_PERIOD_NOT_STARTED
     PortfolioValidationError:
       type: object
       description: Stable transport shape for portfolio request validation errors.

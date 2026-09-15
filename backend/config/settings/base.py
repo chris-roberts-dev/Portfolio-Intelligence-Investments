@@ -139,5 +139,8 @@ SPECTACULAR_SETTINGS = {
         "HoldingMetricUnavailableReasonEnum": (
             "apps.portfolios.services.dashboard_holdings.HoldingMetricUnavailableReason"
         ),
+        "PortfolioSummaryUnavailableReasonEnum": (
+            "apps.portfolios.services.dashboard_summary.PortfolioSummaryUnavailableReason"
+        ),
     },
 }
