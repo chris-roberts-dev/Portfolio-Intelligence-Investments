@@ -31,6 +31,10 @@ def test_sample_standard_deviation_rejects_missing_or_nonfinite_values() -> None
         sample_standard_deviation((0.01, float("nan")))
 
 
+def test_constant_returns_have_zero_annualized_volatility() -> None:
+    assert annualized_volatility((0.01, 0.01, 0.01)) == 0.0
+
+
 def test_annualized_volatility_uses_sqrt_252() -> None:
     result = annualized_volatility((-0.01, 0.0, 0.01))
 

@@ -12,8 +12,8 @@ from apps.market_data.providers.csv import (
 )
 from portfolio_engine.contracts.market_data_validation import validate_price_frame
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-CSV_FIXTURE_ROOT = REPO_ROOT / "sample_data" / "market_data" / "csv"
+BACKEND_ROOT = Path(__file__).resolve().parents[3]
+CSV_FIXTURE_ROOT = BACKEND_ROOT / "sample_data" / "market_data"
 
 ASSET_ID = UUID("00000000-0000-0000-0000-000000000001")
 RETRIEVED_AT = datetime(2026, 1, 5, 12, tzinfo=UTC)
@@ -39,7 +39,7 @@ def test_csv_schema_is_explicit_and_minimal() -> None:
 def test_committed_valid_fixture_normalizes_to_canonical_frame() -> None:
     provider = CsvMarketDataProvider(
         {
-            "AAPL": CSV_FIXTURE_ROOT / "aapl_daily.csv",
+            "AAPL": CSV_FIXTURE_ROOT / "aapl.csv",
         },
         retrieved_at=RETRIEVED_AT,
     )
@@ -79,10 +79,20 @@ def test_missing_provider_symbol_path_returns_no_data() -> None:
     assert result.issues[ASSET_ID].code == CsvProviderIssueCode.NO_DATA
 
 
-def test_invalid_committed_fixture_returns_data_quality_issue() -> None:
+def test_invalid_csv_returns_data_quality_issue(
+    tmp_path: Path,
+) -> None:
+    invalid_fixture = tmp_path / "invalid_non_positive_price.csv"
+    invalid_fixture.write_text(
+        (
+            "trade_date,open,high,low,close,adjusted_close,volume\n"
+            "2025-01-02,100,101,99,100,0,1000\n"
+        ),
+        encoding="utf-8",
+    )
     provider = CsvMarketDataProvider(
         {
-            "AAPL": CSV_FIXTURE_ROOT / "invalid_non_positive_price.csv",
+            "AAPL": invalid_fixture,
         },
         retrieved_at=RETRIEVED_AT,
     )

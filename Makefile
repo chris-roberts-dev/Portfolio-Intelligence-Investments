@@ -40,7 +40,7 @@ typecheck:
 	cd backend && uv run mypy
 
 test:
-	cd backend && uv run pytest -q
+	docker compose exec backend uv run pytest -q --ds=config.settings.test
 
 lock:
 	cd backend && uv lock

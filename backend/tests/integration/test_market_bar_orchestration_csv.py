@@ -15,8 +15,8 @@ from apps.market_data.services.asset_resolution import (
 )
 from apps.market_data.services.market_bar_query import execute_market_bar_query
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-CSV_FIXTURE_ROOT = REPOSITORY_ROOT / "sample_data" / "market_data" / "csv"
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+CSV_FIXTURE_ROOT = BACKEND_ROOT / "sample_data" / "market_data"
 
 AAPL_ID = UUID("00000000-0000-0000-0000-000000000001")
 RETRIEVED_AT = datetime(2026, 1, 5, 12, tzinfo=UTC)
@@ -35,7 +35,7 @@ def test_csv_provider_orchestration_preserves_order_status_and_provenance() -> N
     )
     provider = CsvMarketDataProvider(
         {
-            "AAPL": CSV_FIXTURE_ROOT / "aapl_daily.csv",
+            "AAPL": CSV_FIXTURE_ROOT / "aapl.csv",
         },
         retrieved_at=RETRIEVED_AT,
     )
