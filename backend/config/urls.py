@@ -14,6 +14,10 @@ urlpatterns = [
         name="api-v1-health",
     ),
     path(
+        "api/v1/auth/",
+        include("apps.accounts.api.urls"),
+    ),
+    path(
         "api/v1/market-data/bars/query/",
         market_bar_query_view,
         name="api-v1-market-data-bars-query",

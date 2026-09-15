@@ -83,6 +83,97 @@ paths:
               schema:
                 $ref: '#/components/schemas/PortfolioApiError'
           description: A required provider or analytics dependency is unavailable.
+  /api/v1/auth/login/:
+    post:
+      operationId: auth_login
+      description: Authenticate an email/password identity and establish a Django
+        session. A valid CSRF token from GET /api/v1/auth/session/ is required.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionResult'
+          description: Authenticated browser-session state.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthValidationError'
+          description: Email/password request validation failed.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthApiError'
+          description: The supplied email/password pair is invalid.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthApiError'
+          description: CSRF validation failed.
+  /api/v1/auth/logout/:
+    post:
+      operationId: auth_logout
+      description: Destroy the current Django session. A valid session and CSRF token
+        are required.
+      tags:
+      - auth
+      security:
+      - csrfDeferredCookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionResult'
+          description: Anonymous browser-session state after logout.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthApiError'
+          description: No authenticated session is present.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthApiError'
+          description: Authentication or CSRF validation failed.
+  /api/v1/auth/session/:
+    get:
+      operationId: auth_session
+      description: Return the current Django browser-session state and issue the CSRF
+        cookie required by login/logout POST requests.
+      tags:
+      - auth
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionResult'
+          description: Current authenticated or anonymous session state.
   /api/v1/health/:
     get:
       operationId: health_check
@@ -992,6 +1083,74 @@ components:
       - is_short_period
       - value
       - wealth_ratio
+    AuthApiError:
+      type: object
+      description: Stable authentication/session error response.
+      properties:
+        code:
+          type: string
+          readOnly: true
+        detail:
+          type: string
+          readOnly: true
+      required:
+      - code
+      - detail
+    AuthSessionResult:
+      type: object
+      description: Current browser-session authentication state.
+      properties:
+        authenticated:
+          type: boolean
+          readOnly: true
+        user:
+          allOf:
+          - $ref: '#/components/schemas/AuthenticatedUser'
+          readOnly: true
+          nullable: true
+      required:
+      - authenticated
+      - user
+    AuthValidationError:
+      type: object
+      description: Stable authentication request validation error response.
+      properties:
+        code:
+          type: string
+          readOnly: true
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          readOnly: true
+      required:
+      - code
+      - errors
+    AuthenticatedUser:
+      type: object
+      description: Safe current-user fields only.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        first_name:
+          type: string
+          readOnly: true
+        last_name:
+          type: string
+          readOnly: true
+      required:
+      - email
+      - first_name
+      - id
+      - last_name
     BenchmarkPerformancePoint:
       type: object
       description: One exact-date benchmark point; gaps remain explicit nulls.
@@ -2647,6 +2806,21 @@ components:
       - 1d
       type: string
       description: '* `1d` - 1d'
+    LoginRequest:
+      type: object
+      description: Email/password login request.
+      properties:
+        email:
+          type: string
+          format: email
+          writeOnly: true
+        password:
+          type: string
+          writeOnly: true
+          maxLength: 128
+      required:
+      - email
+      - password
     MarketBarApiError:
       type: object
       description: Stable transport shape for application/provider-system errors.
@@ -3477,6 +3651,10 @@ components:
       type: http
       scheme: basic
     cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    csrfDeferredCookieAuth:
       type: apiKey
       in: cookie
       name: sessionid

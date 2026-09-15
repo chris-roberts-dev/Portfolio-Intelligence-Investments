@@ -1,10 +1,14 @@
 import { render, screen } from "@testing-library/react";
 
-import type { DashboardSnapshotResult } from "../../types/dashboard";
 import { DashboardOverview } from "./DashboardOverview";
+import type { DashboardSnapshotResult } from "../../types/dashboard";
 
 vi.mock("../../components/charts/PerformanceChart", () => ({
   PerformanceChart: () => <div data-testid="performance-chart">Chart</div>,
+}));
+
+vi.mock("./HoldingsPanel", () => ({
+  HoldingsPanel: () => <div data-testid="holdings-panel">Holdings panel</div>,
 }));
 
 function snapshotFixture(): DashboardSnapshotResult {
@@ -35,6 +39,12 @@ function snapshotFixture(): DashboardSnapshotResult {
       },
       {
         module: "PERFORMANCE",
+        status: "AVAILABLE",
+        error_code: null,
+        detail: null,
+      },
+      {
+        module: "HOLDINGS",
         status: "AVAILABLE",
         error_code: null,
         detail: null,
@@ -127,7 +137,25 @@ function snapshotFixture(): DashboardSnapshotResult {
       },
     },
     allocation: null,
-    holdings: null,
+    holdings: {
+      holdings: [],
+      data_quality: "CURRENT",
+      warnings: [],
+      provenance: {
+        portfolio_id: "00000000-0000-0000-0000-000000000002",
+        base_currency: "USD",
+        provider: "mock",
+        requested_start: "2026-09-01",
+        requested_end_exclusive: "2026-09-16",
+        effective_start: "2026-09-01",
+        effective_end_exclusive: "2026-09-16",
+        current_price_as_of: "2026-09-15T21:55:00Z",
+        period_data_as_of: "2026-09-15T21:55:00Z",
+        calculated_at: "2026-09-15T22:00:00Z",
+        current_price_field: "close",
+        period_price_field: "adjusted_close",
+      },
+    },
     movers: null,
     analytics: null,
     review_items: null,
@@ -135,7 +163,7 @@ function snapshotFixture(): DashboardSnapshotResult {
 }
 
 describe("DashboardOverview", () => {
-  it("renders canonical performance and summary values", async () => {
+  it("renders canonical performance, summary, and lazy holdings values", async () => {
     render(
       <DashboardOverview
         snapshot={snapshotFixture()}
@@ -152,6 +180,9 @@ describe("DashboardOverview", () => {
 
     expect(
       await screen.findByTestId("performance-chart"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("holdings-panel"),
     ).toBeInTheDocument();
   });
 

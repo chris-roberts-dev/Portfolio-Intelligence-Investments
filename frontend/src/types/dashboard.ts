@@ -156,6 +156,72 @@ export interface DashboardPortfolioSummaryResult {
   provenance: DashboardPortfolioSummaryProvenance;
 }
 
+export type HoldingMetricUnavailableReason =
+  | "CURRENT_PRICE_UNAVAILABLE"
+  | "PERIOD_HISTORY_UNAVAILABLE"
+  | "PERIOD_START_PRICE_UNAVAILABLE"
+  | "PERIOD_END_PRICE_UNAVAILABLE"
+  | "CURRENT_ALLOCATION_UNAVAILABLE"
+  | "CONTRIBUTION_NOT_CALCULATED";
+
+export interface HoldingSparklinePoint {
+  observation_date: string;
+  adjusted_close: string | null;
+}
+
+export interface DashboardHoldingWarning {
+  code: string;
+  message: string;
+  asset_id: string;
+  symbol: string;
+  observation_date: string | null;
+}
+
+export interface DashboardHolding {
+  asset_id: string;
+  symbol: string;
+  name: string;
+  asset_type: string;
+  currency: string;
+  quantity: string;
+  current_price: string | null;
+  current_price_date: string | null;
+  current_price_retrieved_at: string | null;
+  stale_trading_sessions: number | null;
+  market_value: string | null;
+  weight: number | null;
+  weight_unavailable_reason: HoldingMetricUnavailableReason | null;
+  selected_period_return: number | null;
+  selected_period_return_unavailable_reason: HoldingMetricUnavailableReason | null;
+  contribution_to_return: number | null;
+  contribution_unavailable_reason: HoldingMetricUnavailableReason | null;
+  sparkline: HoldingSparklinePoint[];
+  data_quality: PerformanceDataQuality;
+  warnings: DashboardHoldingWarning[];
+}
+
+export interface DashboardHoldingsProvenance {
+  portfolio_id: string;
+  base_currency: string;
+  provider: string;
+  requested_start: string;
+  requested_end_exclusive: string;
+  effective_start: string;
+  effective_end_exclusive: string;
+  current_price_as_of: string | null;
+  period_data_as_of: string | null;
+  calculated_at: string;
+  current_price_field: string;
+  period_price_field: string;
+}
+
+export interface DashboardHoldingsResult {
+  holdings: DashboardHolding[];
+  data_quality: PerformanceDataQuality;
+  warnings: DashboardHoldingWarning[];
+  provenance: DashboardHoldingsProvenance;
+}
+
 export interface DashboardSnapshotResult {
   snapshot: DashboardSnapshotContext;
   is_complete: boolean;
@@ -163,7 +229,7 @@ export interface DashboardSnapshotResult {
   summary: DashboardPortfolioSummaryResult | null;
   performance: DashboardPerformanceResult | null;
   allocation: unknown | null;
-  holdings: unknown | null;
+  holdings: DashboardHoldingsResult | null;
   movers: unknown | null;
   analytics: unknown | null;
   review_items: unknown | null;

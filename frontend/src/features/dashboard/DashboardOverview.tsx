@@ -1,4 +1,7 @@
+import { lazy, Suspense } from "react";
+
 import { ApiError } from "../../api/client";
+import { LazySection } from "../../components/ui/LazySection";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { StatePanel } from "../../components/ui/StatePanel";
 import type {
@@ -7,6 +10,11 @@ import type {
 } from "../../types/dashboard";
 import { PerformanceHero } from "./PerformanceHero";
 import { PortfolioSummaryCard } from "./PortfolioSummaryCard";
+
+const HoldingsPanel = lazy(async () => {
+  const module = await import("./HoldingsPanel");
+  return { default: module.HoldingsPanel };
+});
 
 interface DashboardOverviewProps {
   snapshot: DashboardSnapshotResult | undefined;
@@ -46,6 +54,28 @@ function DashboardSkeleton() {
         </div>
       </section>
     </div>
+  );
+}
+
+function HoldingsSkeleton() {
+  return (
+    <section
+      className="min-h-[28rem] rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+      aria-label="Loading holdings"
+    >
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <Skeleton className="h-3 w-28" />
+          <Skeleton className="mt-3 h-6 w-32" />
+        </div>
+        <Skeleton className="h-8 w-36" />
+      </div>
+      <div className="mt-8 space-y-3">
+        {Array.from({ length: 5 }, (_, index) => (
+          <Skeleton key={index} className="h-20 w-full" />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -98,13 +128,17 @@ export function DashboardOverview({
 
   const performanceError = moduleError(snapshot, "PERFORMANCE");
   const summaryError = moduleError(snapshot, "SUMMARY");
-  const hasUsableOverview = snapshot.performance !== null || snapshot.summary !== null;
+  const holdingsError = moduleError(snapshot, "HOLDINGS");
+  const hasUsableDashboard =
+    snapshot.performance !== null ||
+    snapshot.summary !== null ||
+    snapshot.holdings !== null;
 
-  if (!hasUsableOverview) {
+  if (!hasUsableDashboard) {
     return (
       <StatePanel
         title="Portfolio data is not available yet"
-        message="The dashboard snapshot loaded, but the performance and summary modules are both unavailable for the selected period."
+        message="The dashboard snapshot loaded, but the performance, summary, and holdings modules are unavailable for the selected period."
       />
     );
   }
@@ -145,6 +179,19 @@ export function DashboardOverview({
             moduleError={summaryError}
           />
         </div>
+      </div>
+
+      <div className="mt-5">
+        <LazySection fallback={<HoldingsSkeleton />}>
+          <Suspense fallback={<HoldingsSkeleton />}>
+            <HoldingsPanel
+              holdings={snapshot.holdings}
+              currency={snapshot.snapshot.base_currency}
+              portfolioId={snapshot.snapshot.portfolio_id}
+              moduleError={holdingsError}
+            />
+          </Suspense>
+        </LazySection>
       </div>
     </div>
   );

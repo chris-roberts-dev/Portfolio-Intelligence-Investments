@@ -1,7 +1,10 @@
 import { Route, Routes } from "react-router";
 
+import { ProtectedRoute } from "./features/auth/ProtectedRoute";
 import { DashboardPage } from "./pages/DashboardPage";
+import { HoldingDetailPage } from "./pages/HoldingDetailPage";
 import { HomePage } from "./pages/HomePage";
+import { LoginPage } from "./pages/LoginPage";
 
 function NotFoundPage() {
   return (
@@ -24,11 +27,18 @@ function NotFoundPage() {
 export function App() {
   return (
     <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route
-        path="/portfolios/:portfolioId/dashboard"
-        element={<DashboardPage />}
-      />
+      <Route path="/login" element={<LoginPage />} />
+      <Route element={<ProtectedRoute />}>
+        <Route path="/" element={<HomePage />} />
+        <Route
+          path="/portfolios/:portfolioId/dashboard"
+          element={<DashboardPage />}
+        />
+        <Route
+          path="/portfolios/:portfolioId/holdings/:assetId"
+          element={<HoldingDetailPage />}
+        />
+      </Route>
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );

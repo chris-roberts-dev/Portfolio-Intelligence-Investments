@@ -31,6 +31,20 @@ function apiBaseUrl(): string {
   return configured.endsWith("/") ? configured.slice(0, -1) : configured;
 }
 
+function csrfTokenFromCookie(): string | null {
+  const cookie = document.cookie
+    .split(";")
+    .map((item) => item.trim())
+    .find((item) => item.startsWith("csrftoken="));
+
+  if (!cookie) {
+    return null;
+  }
+
+  const value = cookie.slice("csrftoken=".length);
+  return value ? decodeURIComponent(value) : null;
+}
+
 function errorMessage(payload: ApiErrorPayload, response: Response): string {
   if (typeof payload.detail === "string" && payload.detail.length > 0) {
     return payload.detail;
@@ -43,19 +57,7 @@ function errorMessage(payload: ApiErrorPayload, response: Response): string {
   return `Request failed with status ${response.status}.`;
 }
 
-export async function apiGet<T>(
-  path: string,
-  options: { signal?: AbortSignal } = {},
-): Promise<T> {
-  const response = await fetch(`${apiBaseUrl()}${path}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-    },
-    signal: options.signal,
-  });
-
+async function parseResponse<T>(response: Response): Promise<T> {
   const contentType = response.headers.get("content-type") ?? "";
   const payload: unknown = contentType.includes("application/json")
     ? await response.json()
@@ -75,4 +77,46 @@ export async function apiGet<T>(
   }
 
   return payload as T;
+}
+
+export async function apiGet<T>(
+  path: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<T> {
+  const response = await fetch(`${apiBaseUrl()}${path}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+    },
+    signal: options.signal,
+  });
+
+  return parseResponse<T>(response);
+}
+
+export async function apiPost<T, TBody extends object>(
+  path: string,
+  body: TBody,
+  options: { signal?: AbortSignal } = {},
+): Promise<T> {
+  const csrfToken = csrfTokenFromCookie();
+  const headers = new Headers({
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  });
+
+  if (csrfToken !== null) {
+    headers.set("X-CSRFToken", csrfToken);
+  }
+
+  const response = await fetch(`${apiBaseUrl()}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(body),
+    signal: options.signal,
+  });
+
+  return parseResponse<T>(response);
 }
