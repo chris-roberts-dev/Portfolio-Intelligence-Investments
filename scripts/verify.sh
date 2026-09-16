@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 
-# Run all project quality checks and report failures together.
-#
-# Usage:
-#   make verify
-#   ./scripts/verify.sh
+# Run deterministic Phase 4/v0.1 quality checks and report failures together.
+# Browser tests remain a separate `make e2e` gate because they start their own
+# deterministic demo servers and Chromium process.
 
 set -u
 
@@ -29,33 +27,45 @@ run_check() {
         echo "✓ $name passed"
     else
         local exit_code=$?
-
         echo "✗ $name failed (exit code $exit_code)"
-
         FAILED=1
         FAILED_CHECKS+=("$name")
     fi
 }
 
-run_check "lint" \
+run_check "backend-lint" \
     bash -c 'cd backend && uv run ruff check .'
 
-run_check "format-check" \
+run_check "backend-format-check" \
     bash -c 'cd backend && uv run ruff format --check .'
 
-run_check "typecheck" \
+run_check "backend-typecheck" \
     bash -c 'cd backend && uv run mypy'
 
-run_check "test" \
-    docker compose exec -T backend \
-    uv run pytest -q --ds=config.settings.test
+run_check "django-check" \
+    docker compose run --rm backend python manage.py check
 
-run_check "openapi" \
-    docker compose run --rm backend \
-    python manage.py spectacular \
-    --validate \
-    --file openapi.yaml
+run_check "migration-drift" \
+    docker compose run --rm backend python manage.py makemigrations --check --dry-run
 
+run_check "migrate-check" \
+    docker compose run --rm backend python manage.py migrate --check
+
+run_check "backend-test" \
+    docker compose run --rm backend uv run pytest -q --ds=config.settings.test
+
+run_check "frontend-typecheck" \
+    bash -c 'cd frontend && npm run typecheck'
+
+run_check "frontend-test" \
+    bash -c 'cd frontend && npm test'
+
+run_check "frontend-build" \
+    bash -c 'cd frontend && npm run build'
+
+run_check "openapi-drift" \
+    docker compose run --rm backend sh -lc \
+    'python manage.py spectacular --fail-on-warn --validate --file openapi.generated.yaml && diff -u openapi.yaml openapi.generated.yaml; status=$?; rm -f openapi.generated.yaml; exit $status'
 
 echo
 echo "============================================================"
@@ -63,7 +73,8 @@ echo "Verification Summary"
 echo "============================================================"
 
 if [ "$FAILED" -eq 0 ]; then
-    echo "✓ All checks passed."
+    echo "✓ All deterministic checks passed."
+    echo "Run 'make e2e' separately for the Phase 4 browser gate."
     exit 0
 fi
 

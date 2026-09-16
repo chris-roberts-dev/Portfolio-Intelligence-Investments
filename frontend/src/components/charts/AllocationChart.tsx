@@ -8,11 +8,12 @@ import {
 } from "echarts/components";
 import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 
 import { formatCurrency } from "../../features/dashboard/formatting";
 import type { DashboardAllocationGroup } from "../../types/dashboard";
 import { chartTheme } from "./chartTheme";
+import { useECharts } from "./useECharts";
 
 echarts.use([
   BarChart,
@@ -68,32 +69,28 @@ function seriesNameFromParams(params: unknown): string | null {
     return null;
   }
 
-  return typeof first.seriesName === "string" ? first.seriesName : null;
+  return typeof first.seriesName === "string"
+    ? first.seriesName
+    : null;
 }
 
-export function AllocationChart({ groups, currency }: AllocationChartProps) {
+export function AllocationChart({
+  groups,
+  currency,
+}: AllocationChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const weightedGroups = useMemo(
     () => groups.filter((group) => group.weight !== null),
     [groups],
   );
 
-  useEffect(() => {
-    const container = containerRef.current;
-
-    if (container === null || weightedGroups.length === 0) {
-      return undefined;
+  const option = useMemo<EChartsOption | null>(() => {
+    if (weightedGroups.length === 0) {
+      return null;
     }
 
-    const chart = echarts.init(container, undefined, {
-      renderer: "canvas",
-    });
-    const reduceMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-
-    const option: EChartsOption = {
-      animation: !reduceMotion,
+    return {
+      animation: true,
       aria: {
         enabled: true,
         decal: {
@@ -140,7 +137,9 @@ export function AllocationChart({ groups, currency }: AllocationChartProps) {
 
           return [
             `<strong>${escapeHtml(group.label)}</strong>`,
-            escapeHtml(formatCurrency(group.market_value, currency)),
+            escapeHtml(
+              formatCurrency(group.market_value, currency),
+            ),
             escapeHtml(formatWeight(group.weight)),
           ].join("<br />");
         },
@@ -174,7 +173,10 @@ export function AllocationChart({ groups, currency }: AllocationChartProps) {
         barWidth: 34,
         data: [group.weight],
         itemStyle: {
-          color: ALLOCATION_COLORS[index % ALLOCATION_COLORS.length],
+          color:
+            ALLOCATION_COLORS[
+              index % ALLOCATION_COLORS.length
+            ],
           borderRadius:
             index === 0
               ? [8, 0, 0, 8]
@@ -187,19 +189,11 @@ export function AllocationChart({ groups, currency }: AllocationChartProps) {
         },
       })),
     };
-
-    chart.setOption(option);
-
-    const resizeObserver = new ResizeObserver(() => {
-      chart.resize();
-    });
-    resizeObserver.observe(container);
-
-    return () => {
-      resizeObserver.disconnect();
-      chart.dispose();
-    };
   }, [currency, weightedGroups]);
+
+  useECharts(containerRef, option, {
+    enabled: weightedGroups.length > 0,
+  });
 
   if (weightedGroups.length === 0) {
     return null;

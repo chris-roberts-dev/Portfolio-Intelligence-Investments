@@ -271,6 +271,7 @@ def test_analytics_service_composes_phase3_metrics_and_benchmark_beta(
         resolver=resolver,
         provider=provider,
         trading_calendar=trading_calendar,
+        rolling_window_size=20,
         executor=cast(MarketBarQueryExecutor, executor),
     )
 
@@ -288,6 +289,15 @@ def test_analytics_service_composes_phase3_metrics_and_benchmark_beta(
     assert result.beta.value == pytest.approx(0.5)
     assert result.beta.observations == 60
     assert result.benchmark_observations == 60
+
+    assert result.benchmark_correlation is not None
+    assert result.benchmark_correlation.value == pytest.approx(1.0)
+    assert result.benchmark_correlation.observations == 60
+
+    assert result.rolling_return_window == 20
+    assert len(result.rolling_returns) == 41
+    assert result.rolling_returns[0].period_end == start + timedelta(days=20)
+    assert result.rolling_returns[-1].period_end == start + timedelta(days=60)
 
     assert result.current_allocation is current_allocation
     assert result.concentration is not None
@@ -387,3 +397,85 @@ def test_analytics_service_surfaces_application_minimum_history_warning(
     assert PortfolioAnalyticsWarningCode.INSUFFICIENT_HISTORY in warning_codes
     assert PortfolioAnalyticsWarningCode.BENCHMARK_NOT_CONFIGURED in warning_codes
     assert result.provenance.warnings
+
+
+@pytest.mark.django_db
+def test_analytics_service_reports_insufficient_explicit_rolling_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = User.objects.create_user(
+        email="analytics-rolling-short@example.com",
+        password="test-password-123",
+    )
+    portfolio_id = uuid4()
+    first_asset = uuid4()
+    second_asset = uuid4()
+    start = date(2026, 1, 1)
+    returns = (0.01, -0.005, 0.002, 0.003, -0.001)
+    twr = twr_result(
+        start=start,
+        daily_returns=returns,
+    )
+    valuation_times = tuple(
+        datetime.combine(
+            start + timedelta(days=index),
+            datetime.min.time(),
+            tzinfo=UTC,
+        )
+        for index in range(len(returns) + 1)
+    )
+    performance = SimpleNamespace(
+        twr=twr,
+        warnings=(),
+        provenance=SimpleNamespace(
+            portfolio_id=portfolio_id,
+            benchmark_asset_id=None,
+            provider="mock",
+            retrieved_at=None,
+            price_field="adjusted_close",
+            period_start=twr.period_start,
+            period_end=twr.period_end,
+        ),
+    )
+    current = SimpleNamespace(
+        is_complete=True,
+        allocation=allocation(
+            first_asset,
+            second_asset,
+        ),
+    )
+
+    monkeypatch.setattr(
+        analytics,
+        "calculate_owned_portfolio_daily_performance",
+        lambda **_kwargs: performance,
+    )
+    monkeypatch.setattr(
+        analytics,
+        "value_owned_portfolio",
+        lambda **_kwargs: current,
+    )
+
+    resolver, provider, trading_calendar = dependencies()
+    result = analyze_owned_portfolio(
+        user=user,
+        portfolio_id=portfolio_id,
+        valuation_times=valuation_times,
+        provider_name="mock",
+        resolver=resolver,
+        provider=provider,
+        trading_calendar=trading_calendar,
+        rolling_window_size=10,
+        executor=cast(
+            MarketBarQueryExecutor,
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                AssertionError("benchmark request must not execute")
+            ),
+        ),
+    )
+
+    assert result.rolling_return_window == 10
+    assert result.rolling_returns == ()
+
+    warning_codes = {warning.code for warning in result.warnings}
+    assert PortfolioAnalyticsWarningCode.INSUFFICIENT_ROLLING_HISTORY in warning_codes

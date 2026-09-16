@@ -29,6 +29,17 @@ class LedgerReplayError(ValueError):
 class NegativePositionError(LedgerReplayError):
     """Raised when a SELL would create a negative long-only position."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        transaction_id: UUID,
+        asset_id: UUID,
+    ) -> None:
+        super().__init__(message)
+        self.transaction_id = transaction_id
+        self.asset_id = asset_id
+
 
 class CashFlowClassification(StrEnum):
     """Performance-relevant cash-flow classification."""
@@ -178,7 +189,9 @@ def _replay_transactions(
                 raise NegativePositionError(
                     "SELL transaction "
                     f"{ledger_entry.id} would create a negative position "
-                    f"for asset {asset_id}."
+                    f"for asset {asset_id}.",
+                    transaction_id=ledger_entry.id,
+                    asset_id=asset_id,
                 )
 
             quantities[asset_id] = ending_quantity

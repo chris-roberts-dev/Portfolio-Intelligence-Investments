@@ -8,11 +8,16 @@ import {
 } from "echarts/components";
 import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 
-import { formatCurrency, formatDate, formatPercent } from "../../features/dashboard/formatting";
+import {
+  formatCurrency,
+  formatDate,
+  formatPercent,
+} from "../../features/dashboard/formatting";
 import type { DashboardPerformanceResult } from "../../types/dashboard";
 import { chartTheme } from "./chartTheme";
+import { useECharts } from "./useECharts";
 
 export type PerformanceChartMode = "VALUE" | "RETURN";
 
@@ -66,29 +71,29 @@ export function PerformanceChart({
       date: point.observation_date,
       portfolioValue: toFiniteNumber(point.portfolio_value),
       portfolioReturn: point.cumulative_return,
-      benchmarkReturn: benchmarkByDate.get(point.observation_date) ?? null,
+      benchmarkReturn:
+        benchmarkByDate.get(point.observation_date) ?? null,
       quality: point.data_quality,
     }));
   }, [performance]);
 
-  useEffect(() => {
-    const container = containerRef.current;
-
-    if (container === null || rows.length === 0) {
-      return undefined;
+  const option = useMemo<EChartsOption | null>(() => {
+    if (rows.length === 0) {
+      return null;
     }
 
-    const chart = echarts.init(container);
-    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
     const isReturnMode = mode === "RETURN";
     const portfolioData = rows.map((row) => [
       row.date,
       isReturnMode ? row.portfolioReturn : row.portfolioValue,
     ]);
-    const benchmarkData = rows.map((row) => [row.date, row.benchmarkReturn]);
+    const benchmarkData = rows.map((row) => [
+      row.date,
+      row.benchmarkReturn,
+    ]);
 
-    const option: EChartsOption = {
-      animation: !reduceMotion,
+    return {
+      animation: true,
       aria: {
         enabled: true,
         description: isReturnMode
@@ -98,12 +103,16 @@ export function PerformanceChart({
       grid: {
         left: 12,
         right: 18,
-        top: isReturnMode && performance.benchmark_points.length > 0 ? 42 : 20,
+        top:
+          isReturnMode && performance.benchmark_points.length > 0
+            ? 42
+            : 20,
         bottom: 16,
         containLabel: true,
       },
       legend: {
-        show: isReturnMode && performance.benchmark_points.length > 0,
+        show:
+          isReturnMode && performance.benchmark_points.length > 0,
         top: 0,
         right: 0,
         textStyle: { color: chartTheme.axisText },
@@ -121,7 +130,9 @@ export function PerformanceChart({
           const first = params[0] as { data?: unknown };
           const pair = Array.isArray(first.data) ? first.data : [];
           const date = typeof pair[0] === "string" ? pair[0] : "";
-          const row = rows.find((candidate) => candidate.date === date);
+          const row = rows.find(
+            (candidate) => candidate.date === date,
+          );
 
           if (!row) {
             return "";
@@ -130,7 +141,9 @@ export function PerformanceChart({
           const portfolioLabel = isReturnMode
             ? formatPercent(row.portfolioReturn)
             : formatCurrency(
-                row.portfolioValue === null ? null : String(row.portfolioValue),
+                row.portfolioValue === null
+                  ? null
+                  : String(row.portfolioValue),
                 currency,
               );
           const benchmarkLabel =
@@ -143,7 +156,9 @@ export function PerformanceChart({
       },
       xAxis: {
         type: "time",
-        axisLine: { lineStyle: { color: chartTheme.gridline } },
+        axisLine: {
+          lineStyle: { color: chartTheme.gridline },
+        },
         axisLabel: { color: chartTheme.axisText },
         splitLine: { show: false },
       },
@@ -171,7 +186,10 @@ export function PerformanceChart({
           showSymbol: false,
           connectNulls: false,
           smooth: false,
-          lineStyle: { width: 2.5, color: chartTheme.primary },
+          lineStyle: {
+            width: 2.5,
+            color: chartTheme.primary,
+          },
           itemStyle: { color: chartTheme.primary },
           areaStyle: isReturnMode
             ? undefined
@@ -181,7 +199,9 @@ export function PerformanceChart({
         ...(isReturnMode && performance.benchmark_points.length > 0
           ? [
               {
-                name: performance.provenance.benchmark_symbol ?? "Benchmark",
+                name:
+                  performance.provenance.benchmark_symbol ??
+                  "Benchmark",
                 type: "line" as const,
                 showSymbol: false,
                 connectNulls: false,
@@ -198,23 +218,11 @@ export function PerformanceChart({
           : []),
       ],
     };
-    chart.setOption(option);
-
-    const resize = () => chart.resize();
-    const observer =
-      typeof ResizeObserver === "undefined"
-        ? null
-        : new ResizeObserver(resize);
-
-    observer?.observe(container);
-    window.addEventListener("resize", resize);
-
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", resize);
-      chart.dispose();
-    };
   }, [currency, mode, performance, rows]);
+
+  useECharts(containerRef, option, {
+    enabled: rows.length > 0,
+  });
 
   if (rows.length === 0) {
     return null;
@@ -243,19 +251,32 @@ export function PerformanceChart({
             <thead>
               <tr className="border-b border-slate-200 text-slate-500">
                 <th className="py-2 pr-4 font-semibold">Date</th>
-                <th className="py-2 pr-4 font-semibold">Portfolio value</th>
-                <th className="py-2 pr-4 font-semibold">Portfolio return</th>
-                <th className="py-2 pr-4 font-semibold">Benchmark return</th>
+                <th className="py-2 pr-4 font-semibold">
+                  Portfolio value
+                </th>
+                <th className="py-2 pr-4 font-semibold">
+                  Portfolio return
+                </th>
+                <th className="py-2 pr-4 font-semibold">
+                  Benchmark return
+                </th>
                 <th className="py-2 font-semibold">Quality</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.date} className="border-b border-slate-100 last:border-0">
-                  <td className="py-2 pr-4 text-slate-700">{formatDate(row.date)}</td>
+                <tr
+                  key={row.date}
+                  className="border-b border-slate-100 last:border-0"
+                >
+                  <td className="py-2 pr-4 text-slate-700">
+                    {formatDate(row.date)}
+                  </td>
                   <td className="py-2 pr-4 text-slate-700">
                     {formatCurrency(
-                      row.portfolioValue === null ? null : String(row.portfolioValue),
+                      row.portfolioValue === null
+                        ? null
+                        : String(row.portfolioValue),
                       currency,
                     )}
                   </td>
@@ -265,7 +286,9 @@ export function PerformanceChart({
                   <td className="py-2 pr-4 text-slate-700">
                     {formatPercent(row.benchmarkReturn)}
                   </td>
-                  <td className="py-2 text-slate-700">{row.quality}</td>
+                  <td className="py-2 text-slate-700">
+                    {row.quality}
+                  </td>
                 </tr>
               ))}
             </tbody>

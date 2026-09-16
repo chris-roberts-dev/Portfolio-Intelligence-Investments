@@ -1,3 +1,5 @@
+import type { PortfolioAnalyticsResult } from "./analytics";
+
 export type PerformanceDataQuality =
   | "CURRENT"
   | "STALE"
@@ -354,7 +356,7 @@ export interface DashboardSnapshotResult {
   allocation: DashboardAllocationResult | null;
   holdings: DashboardHoldingsResult | null;
   movers: DashboardMoversResult | null;
-  analytics: unknown | null;
+  analytics: PortfolioAnalyticsResult | null;
   review_items: DashboardReviewItemsResult | null;
 }
 

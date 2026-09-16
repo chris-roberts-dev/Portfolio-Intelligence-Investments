@@ -13,14 +13,17 @@ import {
   type LoginRequest,
 } from "../api/auth";
 
-export const AUTH_SESSION_QUERY_KEY = ["auth","session"] as const;
+export const AUTH_SESSION_QUERY_KEY = ["auth", "session"] as const;
 
-function clearOwnerScopedQueries(queryClient: QueryClient) {
+function clearAuthenticatedQueries(queryClient: QueryClient) {
   queryClient.removeQueries({
     predicate: (query) => {
       const root = query.queryKey[0];
+
       return (
         root === "portfolios" ||
+        root === "market-data" ||
+        root === "asset-catalog" ||
         (typeof root === "string" && root.startsWith("portfolio-"))
       );
     },
@@ -42,7 +45,7 @@ export function useLogin() {
   return useMutation({
     mutationFn: (request: LoginRequest) => loginWithPassword(request),
     onSuccess: (session: AuthSessionResult) => {
-      clearOwnerScopedQueries(queryClient);
+      clearAuthenticatedQueries(queryClient);
       queryClient.setQueryData(AUTH_SESSION_QUERY_KEY, session);
     },
   });
@@ -54,7 +57,7 @@ export function useLogout() {
   return useMutation({
     mutationFn: () => logoutSession(),
     onSuccess: (session: AuthSessionResult) => {
-      clearOwnerScopedQueries(queryClient);
+      clearAuthenticatedQueries(queryClient);
       queryClient.setQueryData(AUTH_SESSION_QUERY_KEY, session);
     },
   });

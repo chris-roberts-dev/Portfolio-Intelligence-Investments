@@ -1,4 +1,4 @@
-"""Versioned owned-portfolio read API routes."""
+"""Versioned owned-portfolio read and management API routes."""
 
 from django.urls import path
 
@@ -10,6 +10,12 @@ from apps.portfolios.api.dashboard_snapshot_views import (
 )
 from apps.portfolios.api.holdings_dashboard_views import (
     portfolio_dashboard_holdings_view,
+)
+from apps.portfolios.api.management_views import (
+    asset_catalog_view,
+    portfolio_transaction_create_view,
+    portfolio_transaction_import_confirm_view,
+    portfolio_transaction_import_preview_view,
 )
 from apps.portfolios.api.movers_views import (
     portfolio_dashboard_movers_view,
@@ -25,12 +31,18 @@ from apps.portfolios.api.summary_views import (
 )
 from apps.portfolios.api.views import (
     portfolio_analytics_view,
+    portfolio_benchmark_view,
     portfolio_detail_view,
     portfolio_holdings_view,
     portfolio_list_view,
 )
 
 urlpatterns = [
+    path(
+        "assets/",
+        asset_catalog_view,
+        name="api-v1-asset-catalog",
+    ),
     path(
         "portfolios/",
         portfolio_list_view,
@@ -40,6 +52,11 @@ urlpatterns = [
         "portfolios/<uuid:portfolio_id>/",
         portfolio_detail_view,
         name="api-v1-portfolio-detail",
+    ),
+    path(
+        "portfolios/<uuid:portfolio_id>/benchmark/",
+        portfolio_benchmark_view,
+        name="api-v1-portfolio-benchmark",
     ),
     path(
         "portfolios/<uuid:portfolio_id>/allocation/",
@@ -80,6 +97,21 @@ urlpatterns = [
         "portfolios/<uuid:portfolio_id>/summary/",
         portfolio_dashboard_summary_view,
         name="api-v1-portfolio-dashboard-summary",
+    ),
+    path(
+        "portfolios/<uuid:portfolio_id>/transactions/",
+        portfolio_transaction_create_view,
+        name="api-v1-portfolio-transaction-create",
+    ),
+    path(
+        "portfolios/<uuid:portfolio_id>/transactions/import/preview/",
+        portfolio_transaction_import_preview_view,
+        name="api-v1-portfolio-transaction-import-preview",
+    ),
+    path(
+        "portfolios/<uuid:portfolio_id>/transactions/import/confirm/",
+        portfolio_transaction_import_confirm_view,
+        name="api-v1-portfolio-transaction-import-confirm",
     ),
     path(
         "analytics/portfolios/<uuid:portfolio_id>/",

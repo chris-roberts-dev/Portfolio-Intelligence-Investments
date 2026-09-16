@@ -1,5 +1,3 @@
-"""Explicit request and error serializers for owned-portfolio read APIs."""
-
 from __future__ import annotations
 
 import math
@@ -84,6 +82,24 @@ class PortfolioAnalyticsQuerySerializer(PortfolioProviderQuerySerializer):
             value,
             field_name="minimum_acceptable_return_annual",
         )
+
+
+class PortfolioAnalysisQuerySerializer(PortfolioAnalyticsQuerySerializer):
+    """Dedicated Portfolio Analysis query with explicit rolling-return input.
+
+    ``rolling_window`` is an observation count, not a calendar-day count.
+    Omitting it means no rolling-return series is requested. There is
+    intentionally no hidden default window.
+    """
+
+    rolling_window = serializers.IntegerField(
+        required=False,
+        min_value=1,
+    )
+
+    @property
+    def rolling_window_value(self) -> int | None:
+        return cast(int | None, self.validated_data.get("rolling_window"))
 
 
 class PortfolioValidationErrorSerializer(serializers.Serializer[object]):

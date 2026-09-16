@@ -431,6 +431,7 @@ def test_analytics_endpoint_builds_only_requested_trading_session_valuations(
             "end": "2026-01-06",
             "risk_free_rate_annual": "0.02",
             "minimum_acceptable_return_annual": "0.01",
+            "rolling_window": "21",
         },
     )
 
@@ -442,6 +443,52 @@ def test_analytics_endpoint_builds_only_requested_trading_session_valuations(
     )
     assert captured["risk_free_rate_annual"] == pytest.approx(0.02)
     assert captured["minimum_acceptable_return_annual"] == pytest.approx(0.01)
+    assert captured["rolling_window_size"] == 21
+
+
+@pytest.mark.django_db
+def test_analytics_endpoint_omits_rolling_calculation_without_explicit_window(
+    monkeypatch: pytest.MonkeyPatch,
+    owner: User,
+    portfolio: Portfolio,
+) -> None:
+    calendar = FixedTradingCalendar(
+        (
+            date(2026, 1, 2),
+            date(2026, 1, 5),
+        )
+    )
+    install_provider_dependencies(
+        monkeypatch,
+        calendar=calendar,
+    )
+    captured: dict[str, object] = {}
+
+    def fake_analyze_owned_portfolio(
+        **kwargs: object,
+    ) -> PortfolioAnalyticsResult:
+        captured.update(kwargs)
+        return analytics_result(portfolio.id)
+
+    monkeypatch.setattr(
+        views,
+        "analyze_owned_portfolio",
+        fake_analyze_owned_portfolio,
+    )
+
+    response = authenticated_client(owner).get(
+        reverse(
+            "api-v1-portfolio-analytics",
+            kwargs={"portfolio_id": portfolio.id},
+        ),
+        {
+            "start": "2026-01-01",
+            "end": "2026-01-06",
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert captured["rolling_window_size"] is None
 
 
 @pytest.mark.django_db

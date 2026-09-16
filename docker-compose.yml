@@ -38,6 +38,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - ./sample_data:/sample_data:ro
 
   frontend:
     build:

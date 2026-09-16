@@ -40,6 +40,11 @@ paths:
           format: double
           default: 0.0
       - in: query
+        name: rolling_window
+        schema:
+          type: integer
+          minimum: 1
+      - in: query
         name: start
         schema:
           type: string
@@ -83,6 +88,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/PortfolioApiError'
           description: A required provider or analytics dependency is unavailable.
+  /api/v1/assets/:
+    get:
+      operationId: asset_catalog_list
+      description: List active canonical USD stock/ETF identities available for transaction
+        entry. This endpoint performs no provider lookup.
+      tags:
+      - assets
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AssetCatalogItem'
+          description: Active canonical asset identities.
   /api/v1/auth/login/:
     post:
       operationId: auth_login
@@ -259,6 +283,40 @@ paths:
                 items:
                   $ref: '#/components/schemas/PortfolioSummary'
           description: Owned portfolio summaries.
+    post:
+      operationId: portfolio_create
+      description: Create one USD portfolio owned by the authenticated user. Ownership
+        is derived exclusively from the authenticated session.
+      tags:
+      - portfolios
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortfolioCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PortfolioCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PortfolioCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioSummary'
+          description: Created owned portfolio.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioValidationError'
+          description: Portfolio name validation failed.
   /api/v1/portfolios/{portfolio_id}/:
     get:
       operationId: portfolio_detail
@@ -282,6 +340,51 @@ paths:
               schema:
                 $ref: '#/components/schemas/PortfolioSummary'
           description: Owned portfolio summary.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The portfolio does not exist in the authenticated user's scope.
+    patch:
+      operationId: portfolio_rename
+      description: Rename one portfolio owned by the authenticated user.
+      parameters:
+      - in: path
+        name: portfolio_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - portfolios
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPortfolioRenameRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPortfolioRenameRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPortfolioRenameRequest'
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioSummary'
+          description: Renamed owned portfolio.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioValidationError'
+          description: Portfolio name validation failed.
         '404':
           content:
             application/json:
@@ -346,6 +449,53 @@ paths:
                 $ref: '#/components/schemas/PortfolioApiError'
           description: A required provider, calendar, valuation, or allocation dependency
             failed.
+  /api/v1/portfolios/{portfolio_id}/benchmark/:
+    patch:
+      operationId: portfolio_benchmark_update
+      description: Select or clear the benchmark for one authenticated-user-owned
+        portfolio using an active canonical USD stock/ETF asset identity.
+      parameters:
+      - in: path
+        name: portfolio_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - portfolios
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPortfolioBenchmarkRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPortfolioBenchmarkRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPortfolioBenchmarkRequest'
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioSummary'
+          description: Owned portfolio with updated benchmark selection.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioValidationError'
+          description: Benchmark asset identity is invalid or unsupported.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The portfolio does not exist in the authenticated user's scope.
   /api/v1/portfolios/{portfolio_id}/dashboard/:
     get:
       operationId: portfolio_dashboard_snapshot
@@ -853,6 +1003,152 @@ paths:
                 $ref: '#/components/schemas/PortfolioApiError'
           description: A required provider, calendar, valuation, or accounting dependency
             failed.
+  /api/v1/portfolios/{portfolio_id}/transactions/:
+    post:
+      operationId: portfolio_transaction_create
+      description: Create one canonical owned-portfolio ledger transaction and replay
+        the authoritative long-only ledger before commit.
+      parameters:
+      - in: path
+        name: portfolio_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - transactions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortfolioTransactionCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PortfolioTransactionCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PortfolioTransactionCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioTransaction'
+          description: Persisted canonical transaction.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionWriteValidationError'
+          description: Transaction input or ledger replay validation failed.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The portfolio does not exist in the authenticated user's scope.
+  /api/v1/portfolios/{portfolio_id}/transactions/import/confirm/:
+    post:
+      operationId: portfolio_transaction_import_confirm
+      description: Re-parse, revalidate, replay, and atomically commit the documented
+        CSV transaction format. Any invalid row prevents the complete import.
+      parameters:
+      - in: path
+        name: portfolio_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - transactions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionImportRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TransactionImportRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TransactionImportRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionImportResult'
+          description: Committed atomic CSV import.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionImportError'
+          description: CSV structure, row validation, or ledger replay validation
+            failed.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The portfolio does not exist in the authenticated user's scope.
+  /api/v1/portfolios/{portfolio_id}/transactions/import/preview/:
+    post:
+      operationId: portfolio_transaction_import_preview
+      description: Parse and validate the documented CSV transaction format without
+        persisting rows. Preview uses the same transaction model validation and ledger
+        replay rules as confirmation.
+      parameters:
+      - in: path
+        name: portfolio_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - transactions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionImportRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TransactionImportRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TransactionImportRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionImportPreview'
+          description: Normalized atomic-import preview.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionImportError'
+          description: CSV request, structure, or bounds validation failed.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: The portfolio does not exist in the authenticated user's scope.
   /api/v1/schema/:
     get:
       operationId: schema_retrieve
@@ -1083,6 +1379,36 @@ components:
       - is_short_period
       - value
       - wealth_ratio
+    AssetCatalogItem:
+      type: object
+      description: Canonical active asset identity available for transaction entry.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        symbol:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        asset_type:
+          type: string
+          readOnly: true
+        exchange:
+          type: string
+          readOnly: true
+        currency:
+          type: string
+          readOnly: true
+      required:
+      - asset_type
+      - currency
+      - exchange
+      - id
+      - name
+      - symbol
     AuthApiError:
       type: object
       description: Stable authentication/session error response.
@@ -1254,6 +1580,27 @@ components:
       - long_only
       - security_position_count
       - weight_sum_tolerance
+    CorrelationResult:
+      type: object
+      description: Benchmark Pearson correlation with aligned observation count.
+      properties:
+        value:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        observations:
+          type: integer
+          readOnly: true
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/EngineWarning'
+          readOnly: true
+      required:
+      - observations
+      - value
+      - warnings
     CurrentHolding:
       type: object
       description: One current ledger-derived holding with its accepted raw-close
@@ -3063,6 +3410,21 @@ components:
     NullEnum:
       enum:
       - null
+    PatchedPortfolioBenchmarkRequest:
+      type: object
+      description: Select or clear one canonical benchmark asset for an owned portfolio.
+      properties:
+        benchmark_asset_id:
+          type: string
+          format: uuid
+          nullable: true
+    PatchedPortfolioRenameRequest:
+      type: object
+      description: Rename one authenticated-user-owned portfolio.
+      properties:
+        name:
+          type: string
+          maxLength: 255
     PerformanceDataQualityEnum:
       enum:
       - CURRENT
@@ -3161,6 +3523,11 @@ components:
           - $ref: '#/components/schemas/BetaResult'
           readOnly: true
           nullable: true
+        benchmark_correlation:
+          allOf:
+          - $ref: '#/components/schemas/CorrelationResult'
+          readOnly: true
+          nullable: true
         current_allocation:
           allOf:
           - $ref: '#/components/schemas/PortfolioAllocationResult'
@@ -3171,6 +3538,15 @@ components:
           - $ref: '#/components/schemas/ConcentrationResult'
           readOnly: true
           nullable: true
+        rolling_return_window:
+          type: integer
+          readOnly: true
+          nullable: true
+        rolling_returns:
+          type: array
+          items:
+            $ref: '#/components/schemas/RollingReturnObservation'
+          readOnly: true
         provenance:
           allOf:
           - $ref: '#/components/schemas/AnalyticalResultProvenance'
@@ -3182,6 +3558,7 @@ components:
           readOnly: true
       required:
       - annualized_volatility
+      - benchmark_correlation
       - benchmark_observations
       - beta
       - cagr
@@ -3192,6 +3569,8 @@ components:
       - observations
       - portfolio_id
       - provenance
+      - rolling_return_window
+      - rolling_returns
       - sharpe
       - sortino
       - warnings
@@ -3219,6 +3598,7 @@ components:
       - SOURCE_WARNING
       - PERFORMANCE_UNAVAILABLE
       - INSUFFICIENT_HISTORY
+      - INSUFFICIENT_ROLLING_HISTORY
       - UNDEFINED_CAGR
       - UNDEFINED_SHARPE
       - UNDEFINED_SORTINO
@@ -3227,6 +3607,7 @@ components:
       - BENCHMARK_NO_DATA
       - BENCHMARK_PROVIDER_FAILED
       - UNDEFINED_BETA
+      - UNDEFINED_CORRELATION
       - CURRENT_VALUATION_INCOMPLETE
       - CURRENT_ALLOCATION_UNAVAILABLE
       type: string
@@ -3234,6 +3615,7 @@ components:
         * `SOURCE_WARNING` - SOURCE_WARNING
         * `PERFORMANCE_UNAVAILABLE` - PERFORMANCE_UNAVAILABLE
         * `INSUFFICIENT_HISTORY` - INSUFFICIENT_HISTORY
+        * `INSUFFICIENT_ROLLING_HISTORY` - INSUFFICIENT_ROLLING_HISTORY
         * `UNDEFINED_CAGR` - UNDEFINED_CAGR
         * `UNDEFINED_SHARPE` - UNDEFINED_SHARPE
         * `UNDEFINED_SORTINO` - UNDEFINED_SORTINO
@@ -3242,6 +3624,7 @@ components:
         * `BENCHMARK_NO_DATA` - BENCHMARK_NO_DATA
         * `BENCHMARK_PROVIDER_FAILED` - BENCHMARK_PROVIDER_FAILED
         * `UNDEFINED_BETA` - UNDEFINED_BETA
+        * `UNDEFINED_CORRELATION` - UNDEFINED_CORRELATION
         * `CURRENT_VALUATION_INCOMPLETE` - CURRENT_VALUATION_INCOMPLETE
         * `CURRENT_ALLOCATION_UNAVAILABLE` - CURRENT_ALLOCATION_UNAVAILABLE
     PortfolioApiError:
@@ -3257,6 +3640,15 @@ components:
       required:
       - code
       - detail
+    PortfolioCreateRequest:
+      type: object
+      description: Create one authenticated-user-owned USD portfolio.
+      properties:
+        name:
+          type: string
+          maxLength: 255
+      required:
+      - name
     PortfolioPerformancePoint:
       type: object
       description: One chart-ready portfolio point.
@@ -3384,6 +3776,105 @@ components:
         * `CURRENT_VALUATION_INCOMPLETE` - CURRENT_VALUATION_INCOMPLETE
         * `TOTAL_MARKET_VALUE_NON_POSITIVE` - TOTAL_MARKET_VALUE_NON_POSITIVE
         * `SELECTED_PERIOD_NOT_STARTED` - SELECTED_PERIOD_NOT_STARTED
+    PortfolioTransaction:
+      type: object
+      description: Persisted canonical transaction representation.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        portfolio_id:
+          type: string
+          format: uuid
+          readOnly: true
+        transaction_type:
+          type: string
+          readOnly: true
+        asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        asset_symbol:
+          type: string
+          readOnly: true
+          nullable: true
+        occurred_at:
+          type: string
+          format: date-time
+          readOnly: true
+        source_sequence:
+          type: integer
+          readOnly: true
+        quantity:
+          type: string
+          readOnly: true
+          nullable: true
+        price:
+          type: string
+          readOnly: true
+          nullable: true
+        fees:
+          type: string
+          readOnly: true
+        cash_amount:
+          type: string
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - asset_id
+      - asset_symbol
+      - cash_amount
+      - created_at
+      - fees
+      - id
+      - occurred_at
+      - portfolio_id
+      - price
+      - quantity
+      - source_sequence
+      - transaction_type
+    PortfolioTransactionCreateRequest:
+      type: object
+      description: Transport validation for one canonical ledger transaction.
+      properties:
+        transaction_type:
+          $ref: '#/components/schemas/TransactionTypeEnum'
+        occurred_at:
+          type: string
+          format: date-time
+        asset_id:
+          type: string
+          format: uuid
+          nullable: true
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,16}(?:\.\d{0,12})?$
+          nullable: true
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,8})?$
+          nullable: true
+        fees:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,8})?$
+          default: '0.00000000'
+        cash_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,8})?$
+          nullable: true
+      required:
+      - occurred_at
+      - transaction_type
     PortfolioValidationError:
       type: object
       description: Stable transport shape for portfolio request validation errors.
@@ -3522,6 +4013,21 @@ components:
         * `HOLDINGS` - HOLDINGS
         * `PERFORMANCE` - PERFORMANCE
         * `ANALYTICS` - ANALYTICS
+    RollingReturnObservation:
+      type: object
+      description: One server-calculated trailing cumulative return endpoint.
+      properties:
+        period_end:
+          type: string
+          format: date
+          readOnly: true
+        value:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - period_end
+      - value
     SecurityAllocation:
       type: object
       description: One current security allocation.
@@ -3638,6 +4144,224 @@ components:
         * `CURRENT_VALUATION` - CURRENT_VALUATION
         * `DAILY_PERFORMANCE` - DAILY_PERFORMANCE
         * `ANALYTICS` - ANALYTICS
+    TransactionImportError:
+      type: object
+      description: Stable CSV request/file/confirm validation response envelope.
+      properties:
+        code:
+          type: string
+          readOnly: true
+        detail:
+          type: string
+          readOnly: true
+          nullable: true
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          readOnly: true
+        preview:
+          allOf:
+          - $ref: '#/components/schemas/TransactionImportPreview'
+          readOnly: true
+      required:
+      - code
+      - detail
+      - errors
+      - preview
+    TransactionImportIssue:
+      type: object
+      description: One stable per-row CSV validation issue.
+      properties:
+        code:
+          allOf:
+          - $ref: '#/components/schemas/TransactionImportIssueCodeEnum'
+          readOnly: true
+        field:
+          type: string
+          readOnly: true
+        message:
+          type: string
+          readOnly: true
+      required:
+      - code
+      - field
+      - message
+    TransactionImportIssueCodeEnum:
+      enum:
+      - REQUIRED
+      - INVALID_TRANSACTION_TYPE
+      - INVALID_DATETIME
+      - TIMEZONE_REQUIRED
+      - INVALID_UUID
+      - INVALID_DECIMAL
+      - NONFINITE_DECIMAL
+      - EXTRA_COLUMNS
+      - ASSET_NOT_FOUND
+      - INVALID_TRANSACTION
+      - NEGATIVE_POSITION
+      - ORDERING_CONFLICT
+      type: string
+      description: |-
+        * `REQUIRED` - REQUIRED
+        * `INVALID_TRANSACTION_TYPE` - INVALID_TRANSACTION_TYPE
+        * `INVALID_DATETIME` - INVALID_DATETIME
+        * `TIMEZONE_REQUIRED` - TIMEZONE_REQUIRED
+        * `INVALID_UUID` - INVALID_UUID
+        * `INVALID_DECIMAL` - INVALID_DECIMAL
+        * `NONFINITE_DECIMAL` - NONFINITE_DECIMAL
+        * `EXTRA_COLUMNS` - EXTRA_COLUMNS
+        * `ASSET_NOT_FOUND` - ASSET_NOT_FOUND
+        * `INVALID_TRANSACTION` - INVALID_TRANSACTION
+        * `NEGATIVE_POSITION` - NEGATIVE_POSITION
+        * `ORDERING_CONFLICT` - ORDERING_CONFLICT
+    TransactionImportPreview:
+      type: object
+      description: Atomic CSV import preview contract.
+      properties:
+        row_count:
+          type: integer
+          readOnly: true
+        valid_count:
+          type: integer
+          readOnly: true
+        invalid_count:
+          type: integer
+          readOnly: true
+        can_import:
+          type: boolean
+          readOnly: true
+        atomic:
+          type: boolean
+          readOnly: true
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionImportRowPreview'
+          readOnly: true
+      required:
+      - atomic
+      - can_import
+      - invalid_count
+      - row_count
+      - rows
+      - valid_count
+    TransactionImportRequest:
+      type: object
+      description: Bounded CSV-text request used by both preview and confirm.
+      properties:
+        csv_text:
+          type: string
+          maxLength: 262144
+      required:
+      - csv_text
+    TransactionImportResult:
+      type: object
+      description: Successful atomic CSV import result.
+      properties:
+        imported_count:
+          type: integer
+          readOnly: true
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortfolioTransaction'
+          readOnly: true
+      required:
+      - imported_count
+      - transactions
+    TransactionImportRowPreview:
+      type: object
+      description: One normalized CSV row preview.
+      properties:
+        row_number:
+          type: integer
+          readOnly: true
+        valid:
+          type: boolean
+          readOnly: true
+        transaction_type:
+          type: string
+          readOnly: true
+          nullable: true
+        occurred_at:
+          type: string
+          readOnly: true
+          nullable: true
+        asset_id:
+          type: string
+          readOnly: true
+          nullable: true
+        asset_symbol:
+          type: string
+          readOnly: true
+          nullable: true
+        quantity:
+          type: string
+          readOnly: true
+          nullable: true
+        price:
+          type: string
+          readOnly: true
+          nullable: true
+        fees:
+          type: string
+          readOnly: true
+          nullable: true
+        cash_amount:
+          type: string
+          readOnly: true
+          nullable: true
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionImportIssue'
+          readOnly: true
+      required:
+      - asset_id
+      - asset_symbol
+      - cash_amount
+      - fees
+      - issues
+      - occurred_at
+      - price
+      - quantity
+      - row_number
+      - transaction_type
+      - valid
+    TransactionTypeEnum:
+      enum:
+      - DEPOSIT
+      - WITHDRAWAL
+      - BUY
+      - SELL
+      - DIVIDEND
+      type: string
+      description: |-
+        * `DEPOSIT` - DEPOSIT
+        * `WITHDRAWAL` - WITHDRAWAL
+        * `BUY` - BUY
+        * `SELL` - SELL
+        * `DIVIDEND` - DIVIDEND
+    TransactionWriteValidationError:
+      type: object
+      description: Stable transaction-write validation response.
+      properties:
+        code:
+          type: string
+          readOnly: true
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          readOnly: true
+      required:
+      - code
+      - errors
     UnavailableReasonEnum:
       enum:
       - CURRENT_VALUATION_INCOMPLETE

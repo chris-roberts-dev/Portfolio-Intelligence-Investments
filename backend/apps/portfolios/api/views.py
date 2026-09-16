@@ -1,4 +1,4 @@
-"""Thin DRF views for authenticated owned-portfolio reads."""
+"""Thin DRF views for authenticated owned-portfolio reads and mutations."""
 
 from __future__ import annotations
 
@@ -7,7 +7,8 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, cast
 from uuid import UUID
 
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from django.core.exceptions import ValidationError
+from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.decorators import (
     api_view,
@@ -19,6 +20,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.accounts.models import User
+from apps.assets.models import Asset, AssetType
 from apps.market_data.api.policies import (
     MarketBarQueryThrottle,
     MarketDataProviderAuthorizationError,
@@ -34,7 +36,7 @@ from apps.market_data.providers.configuration import (
 from apps.market_data.providers.registry import ProviderRegistryError
 from apps.market_data.providers.safety import sanitize_provider_message
 from apps.portfolios.api.contracts import (
-    PortfolioAnalyticsQuerySerializer,
+    PortfolioAnalysisQuerySerializer,
     PortfolioApiErrorSerializer,
     PortfolioProviderQuerySerializer,
     PortfolioValidationErrorSerializer,
@@ -44,6 +46,11 @@ from apps.portfolios.api.dependencies import (
     get_asset_resolver,
     get_current_time,
     get_trading_session_calendar,
+)
+from apps.portfolios.api.management_serializers import (
+    PortfolioBenchmarkRequestSerializer,
+    PortfolioCreateRequestSerializer,
+    PortfolioRenameRequestSerializer,
 )
 from apps.portfolios.api.serializers import (
     CurrentPortfolioHoldingsSerializer,
@@ -69,22 +76,67 @@ class _ProviderContext:
     provider: MarketDataProvider
 
 
-@extend_schema(
-    operation_id="portfolio_list",
-    description="List portfolios owned by the authenticated user.",
-    responses={
-        status.HTTP_200_OK: OpenApiResponse(
-            response=PortfolioSummarySerializer(many=True),
-            description="Owned portfolio summaries.",
+@extend_schema_view(
+    get=extend_schema(
+        operation_id="portfolio_list",
+        description="List portfolios owned by the authenticated user.",
+        responses={
+            status.HTTP_200_OK: OpenApiResponse(
+                response=PortfolioSummarySerializer(many=True),
+                description="Owned portfolio summaries.",
+            ),
+        },
+        tags=["portfolios"],
+    ),
+    post=extend_schema(
+        operation_id="portfolio_create",
+        description=(
+            "Create one USD portfolio owned by the authenticated user. Ownership is "
+            "derived exclusively from the authenticated session."
         ),
-    },
-    tags=["portfolios"],
+        request=PortfolioCreateRequestSerializer,
+        responses={
+            status.HTTP_201_CREATED: OpenApiResponse(
+                response=PortfolioSummarySerializer,
+                description="Created owned portfolio.",
+            ),
+            status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+                response=PortfolioValidationErrorSerializer,
+                description="Portfolio name validation failed.",
+            ),
+        },
+        tags=["portfolios"],
+    ),
 )
-@api_view(["GET"])
+@api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def portfolio_list_view(request: Request) -> Response:
-    """Return only portfolios owned by the authenticated principal."""
+    """List owned portfolios or create one owned by the authenticated principal."""
     user = cast(User, request.user)
+
+    if request.method == "POST":
+        serializer = PortfolioCreateRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_response(serializer.errors)
+
+        portfolio = Portfolio(
+            user=user,
+            name=serializer.name_value,
+            base_currency="USD",
+        )
+        try:
+            portfolio.full_clean()
+            portfolio.save()
+        except ValidationError as exc:
+            return _validation_response(
+                getattr(exc, "message_dict", {"non_field_errors": exc.messages})
+            )
+
+        return Response(
+            PortfolioSummarySerializer(portfolio).data,
+            status=status.HTTP_201_CREATED,
+        )
+
     portfolios = Portfolio.objects.owned_by(user).select_related("benchmark_asset")
     return Response(
         PortfolioSummarySerializer(
@@ -95,33 +147,138 @@ def portfolio_list_view(request: Request) -> Response:
     )
 
 
-@extend_schema(
-    operation_id="portfolio_detail",
-    description="Return one portfolio owned by the authenticated user.",
-    responses={
-        status.HTTP_200_OK: OpenApiResponse(
-            response=PortfolioSummarySerializer,
-            description="Owned portfolio summary.",
-        ),
-        status.HTTP_404_NOT_FOUND: OpenApiResponse(
-            response=PortfolioApiErrorSerializer,
-            description="The portfolio does not exist in the authenticated user's scope.",
-        ),
-    },
-    tags=["portfolios"],
+@extend_schema_view(
+    get=extend_schema(
+        operation_id="portfolio_detail",
+        description="Return one portfolio owned by the authenticated user.",
+        responses={
+            status.HTTP_200_OK: OpenApiResponse(
+                response=PortfolioSummarySerializer,
+                description="Owned portfolio summary.",
+            ),
+            status.HTTP_404_NOT_FOUND: OpenApiResponse(
+                response=PortfolioApiErrorSerializer,
+                description=("The portfolio does not exist in the authenticated user's scope."),
+            ),
+        },
+        tags=["portfolios"],
+    ),
+    patch=extend_schema(
+        operation_id="portfolio_rename",
+        description="Rename one portfolio owned by the authenticated user.",
+        request=PortfolioRenameRequestSerializer,
+        responses={
+            status.HTTP_200_OK: OpenApiResponse(
+                response=PortfolioSummarySerializer,
+                description="Renamed owned portfolio.",
+            ),
+            status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+                response=PortfolioValidationErrorSerializer,
+                description="Portfolio name validation failed.",
+            ),
+            status.HTTP_404_NOT_FOUND: OpenApiResponse(
+                response=PortfolioApiErrorSerializer,
+                description=("The portfolio does not exist in the authenticated user's scope."),
+            ),
+        },
+        tags=["portfolios"],
+    ),
 )
-@api_view(["GET"])
+@api_view(["GET", "PATCH"])
 @permission_classes([IsAuthenticated])
 def portfolio_detail_view(
     request: Request,
     portfolio_id: UUID,
 ) -> Response:
-    """Return one owner-scoped portfolio without exposing other users' rows."""
+    """Return or rename one owner-scoped portfolio without exposing other users' rows."""
     user = cast(User, request.user)
     portfolio = _owned_portfolio(user, portfolio_id)
 
     if portfolio is None:
         return _portfolio_not_found_response()
+
+    if request.method == "PATCH":
+        serializer = PortfolioRenameRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return _validation_response(serializer.errors)
+
+        portfolio.name = serializer.name_value
+        try:
+            portfolio.full_clean()
+            portfolio.save(update_fields=("name", "updated_at"))
+        except ValidationError as exc:
+            return _validation_response(
+                getattr(exc, "message_dict", {"non_field_errors": exc.messages})
+            )
+
+    return Response(
+        PortfolioSummarySerializer(portfolio).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@extend_schema(
+    operation_id="portfolio_benchmark_update",
+    description=(
+        "Select or clear the benchmark for one authenticated-user-owned portfolio "
+        "using an active canonical USD stock/ETF asset identity."
+    ),
+    request=PortfolioBenchmarkRequestSerializer,
+    responses={
+        status.HTTP_200_OK: OpenApiResponse(
+            response=PortfolioSummarySerializer,
+            description="Owned portfolio with updated benchmark selection.",
+        ),
+        status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+            response=PortfolioValidationErrorSerializer,
+            description="Benchmark asset identity is invalid or unsupported.",
+        ),
+        status.HTTP_404_NOT_FOUND: OpenApiResponse(
+            response=PortfolioApiErrorSerializer,
+            description=("The portfolio does not exist in the authenticated user's scope."),
+        ),
+    },
+    tags=["portfolios"],
+)
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def portfolio_benchmark_view(
+    request: Request,
+    portfolio_id: UUID,
+) -> Response:
+    """Select or clear one owner-scoped portfolio benchmark."""
+    user = cast(User, request.user)
+    portfolio = _owned_portfolio(user, portfolio_id)
+
+    if portfolio is None:
+        return _portfolio_not_found_response()
+
+    serializer = PortfolioBenchmarkRequestSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _validation_response(serializer.errors)
+
+    benchmark_asset_id = serializer.benchmark_asset_id_value
+    benchmark_asset = None
+
+    if benchmark_asset_id is not None:
+        benchmark_asset = Asset.objects.filter(
+            id=benchmark_asset_id,
+            is_active=True,
+            currency="USD",
+            asset_type__in=(AssetType.STOCK, AssetType.ETF),
+        ).first()
+
+        if benchmark_asset is None:
+            return _validation_response(
+                {
+                    "benchmark_asset_id": [
+                        "Benchmark asset must reference an active canonical USD stock or ETF."
+                    ]
+                }
+            )
+
+    portfolio.benchmark_asset = benchmark_asset
+    portfolio.save(update_fields=("benchmark_asset", "updated_at"))
 
     return Response(
         PortfolioSummarySerializer(portfolio).data,
@@ -227,7 +384,7 @@ def portfolio_holdings_view(
         "Return owned-portfolio performance/risk analytics for an inclusive-start, "
         "exclusive-end trading-session period."
     ),
-    parameters=[PortfolioAnalyticsQuerySerializer],
+    parameters=[PortfolioAnalysisQuerySerializer],
     responses={
         status.HTTP_200_OK: OpenApiResponse(
             response=PortfolioAnalyticsResultSerializer,
@@ -268,7 +425,9 @@ def portfolio_analytics_view(
     if _owned_portfolio(user, portfolio_id) is None:
         return _portfolio_not_found_response()
 
-    query_serializer = PortfolioAnalyticsQuerySerializer(data=request.query_params)
+    query_serializer = PortfolioAnalysisQuerySerializer(
+        data=request.query_params,
+    )
 
     if not query_serializer.is_valid():
         return _validation_response(query_serializer.errors)
@@ -316,6 +475,7 @@ def portfolio_analytics_view(
             minimum_acceptable_return_annual=(
                 query_serializer.minimum_acceptable_return_annual_value
             ),
+            rolling_window_size=query_serializer.rolling_window_value,
         )
     except Portfolio.DoesNotExist:
         return _portfolio_not_found_response()

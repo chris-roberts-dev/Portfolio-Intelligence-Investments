@@ -1,12 +1,3 @@
-"""Explicit DRF serializers for owned-portfolio analytical transport contracts.
-
-Decimal ledger/current-price values are represented as strings so JSON
-serialization preserves their exact Decimal representation. Values already
-inside the quantitative-engine float boundary remain JSON numbers.
-
-Development guide references: Sections 8.5-8.8 and 15.2-15.3.
-"""
-
 from __future__ import annotations
 
 from rest_framework import serializers
@@ -16,6 +7,7 @@ from apps.portfolios.services.analytics import (
     PortfolioAnalyticsResult,
     PortfolioAnalyticsWarning,
     PortfolioAnalyticsWarningCode,
+    RollingReturnObservation,
 )
 from apps.portfolios.services.current_valuation import (
     CurrentPortfolioValuationResult,
@@ -40,7 +32,10 @@ from portfolio_engine.portfolio.valuation import (
     PositionValuationResult,
 )
 from portfolio_engine.risk.concentration import ConcentrationResult
-from portfolio_engine.risk.relationships import BetaResult
+from portfolio_engine.risk.relationships import (
+    BetaResult,
+    CorrelationResult,
+)
 
 
 class PortfolioSummarySerializer(serializers.Serializer[Portfolio]):
@@ -300,6 +295,27 @@ class BetaResultSerializer(serializers.Serializer[BetaResult]):
     )
 
 
+class CorrelationResultSerializer(serializers.Serializer[CorrelationResult]):
+    """Benchmark Pearson correlation with aligned observation count."""
+
+    value = serializers.FloatField(
+        read_only=True,
+        allow_null=True,
+    )
+    observations = serializers.IntegerField(read_only=True)
+    warnings = EngineWarningSerializer(
+        many=True,
+        read_only=True,
+    )
+
+
+class RollingReturnObservationSerializer(serializers.Serializer[RollingReturnObservation]):
+    """One server-calculated trailing cumulative return endpoint."""
+
+    period_end = serializers.DateField(read_only=True)
+    value = serializers.FloatField(read_only=True)
+
+
 class ConcentrationResultSerializer(serializers.Serializer[ConcentrationResult]):
     """Canonical current portfolio concentration measures."""
 
@@ -391,6 +407,10 @@ class PortfolioAnalyticsResultSerializer(serializers.Serializer[PortfolioAnalyti
         read_only=True,
         allow_null=True,
     )
+    benchmark_correlation = CorrelationResultSerializer(
+        read_only=True,
+        allow_null=True,
+    )
     current_allocation = PortfolioAllocationResultSerializer(
         read_only=True,
         allow_null=True,
@@ -398,6 +418,14 @@ class PortfolioAnalyticsResultSerializer(serializers.Serializer[PortfolioAnalyti
     concentration = ConcentrationResultSerializer(
         read_only=True,
         allow_null=True,
+    )
+    rolling_return_window = serializers.IntegerField(
+        read_only=True,
+        allow_null=True,
+    )
+    rolling_returns = RollingReturnObservationSerializer(
+        many=True,
+        read_only=True,
     )
     provenance = AnalyticalResultProvenanceSerializer(read_only=True)
     warnings = PortfolioAnalyticsWarningSerializer(

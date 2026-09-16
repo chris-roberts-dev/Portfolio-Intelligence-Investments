@@ -10,11 +10,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from pathlib import Path
 from types import MappingProxyType
 
 from django.conf import settings
 
 from apps.market_data.providers.base import MarketDataProvider
+from apps.market_data.providers.csv import CsvMarketDataProvider
 from apps.market_data.providers.mock import MockMarketDataProvider
 from apps.market_data.providers.registry import (
     MarketDataProviderRegistry,
@@ -23,6 +25,8 @@ from apps.market_data.providers.registry import (
 from apps.market_data.providers.yfinance import YFinanceMarketDataProvider
 
 MOCK_PROVIDER_RETRIEVED_AT = datetime(2000, 1, 1, tzinfo=UTC)
+SAMPLE_CSV_PROVIDER_RETRIEVED_AT = datetime(2026, 9, 15, 21, 0, tzinfo=UTC)
+SAMPLE_CSV_ROOT = Path(__file__).resolve().parents[4] / "sample_data" / "portfolio_demo"
 
 
 def _build_configured_mock_provider() -> MockMarketDataProvider:
@@ -38,9 +42,21 @@ def _build_configured_yfinance_provider() -> YFinanceMarketDataProvider:
     return YFinanceMarketDataProvider()
 
 
+def _build_configured_csv_provider() -> CsvMarketDataProvider:
+    """Build the committed deterministic CSV provider used by demo/E2E workflows."""
+    paths = {
+        path.stem.upper(): path for path in sorted(SAMPLE_CSV_ROOT.glob("*.csv")) if path.is_file()
+    }
+    return CsvMarketDataProvider(
+        paths,
+        retrieved_at=SAMPLE_CSV_PROVIDER_RETRIEVED_AT,
+    )
+
+
 REGISTERED_PROVIDER_FACTORIES: Mapping[str, ProviderFactory] = MappingProxyType(
     {
         "mock": _build_configured_mock_provider,
+        "csv": _build_configured_csv_provider,
         "yfinance": _build_configured_yfinance_provider,
     }
 )

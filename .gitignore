@@ -18,3 +18,7 @@ htmlcov/
 frontend/node_modules/
 scripts/consolidate_project.py
 docs/project-consolidated.md
+# Deterministic local demo / Playwright runtime artifacts
+backend/.portfolio-intelligence-demo.sqlite3
+frontend/playwright-report/
+frontend/test-results/

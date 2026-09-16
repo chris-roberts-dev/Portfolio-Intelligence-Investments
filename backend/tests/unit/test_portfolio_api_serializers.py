@@ -18,6 +18,7 @@ from apps.portfolios.services.analytics import (
     PortfolioAnalyticsResult,
     PortfolioAnalyticsWarning,
     PortfolioAnalyticsWarningCode,
+    RollingReturnObservation,
 )
 from apps.portfolios.services.current_valuation import (
     CurrentPortfolioValuationResult,
@@ -46,7 +47,10 @@ from portfolio_engine.portfolio.valuation import (
     PositionValuationResult,
 )
 from portfolio_engine.risk.concentration import ConcentrationResult
-from portfolio_engine.risk.relationships import BetaResult
+from portfolio_engine.risk.relationships import (
+    BetaResult,
+    CorrelationResult,
+)
 
 PORTFOLIO_ID = UUID("00000000-0000-0000-0000-000000000101")
 ASSET_ID = UUID("00000000-0000-0000-0000-000000000201")
@@ -249,6 +253,10 @@ def test_analytics_serializer_preserves_metrics_assumptions_and_warning_structur
             value=0.923456789,
             observations=118,
         ),
+        benchmark_correlation=CorrelationResult(
+            value=0.87654321,
+            observations=118,
+        ),
         current_allocation=allocation,
         concentration=ConcentrationResult(
             largest_position_weight=0.7,
@@ -261,6 +269,17 @@ def test_analytics_serializer_preserves_metrics_assumptions_and_warning_structur
             weight_sum_tolerance=1e-8,
         ),
         provenance=provenance,
+        rolling_return_window=21,
+        rolling_returns=(
+            RollingReturnObservation(
+                period_end=date(2026, 8, 31),
+                value=0.04123456789,
+            ),
+            RollingReturnObservation(
+                period_end=date(2026, 9, 15),
+                value=0.05123456789,
+            ),
+        ),
         warnings=(
             PortfolioAnalyticsWarning(
                 code=PortfolioAnalyticsWarningCode.SOURCE_WARNING,
@@ -282,6 +301,19 @@ def test_analytics_serializer_preserves_metrics_assumptions_and_warning_structur
     assert data["sortino"]["value"] == pytest.approx(1.1123456789)
     assert data["maximum_drawdown"]["value"] == pytest.approx(-0.1423456789)
     assert data["beta"]["value"] == pytest.approx(0.923456789)
+    assert data["benchmark_correlation"]["value"] == pytest.approx(0.87654321)
+    assert data["benchmark_correlation"]["observations"] == 118
+    assert data["rolling_return_window"] == 21
+    assert data["rolling_returns"] == [
+        {
+            "period_end": "2026-08-31",
+            "value": pytest.approx(0.04123456789),
+        },
+        {
+            "period_end": "2026-09-15",
+            "value": pytest.approx(0.05123456789),
+        },
+    ]
 
     assert data["current_allocation"]["positions"][0]["weight"] == pytest.approx(0.7)
     assert data["concentration"]["herfindahl_hirschman_index"] == pytest.approx(0.49)
@@ -348,6 +380,9 @@ def test_analytics_serializer_represents_undefined_metrics_as_null() -> None:
     assert data["sortino"] is None
     assert data["maximum_drawdown"] is None
     assert data["beta"] is None
+    assert data["benchmark_correlation"] is None
+    assert data["rolling_return_window"] is None
+    assert data["rolling_returns"] == []
     assert data["current_allocation"] is None
     assert data["concentration"] is None
     assert data["warnings"][0]["code"] == "INSUFFICIENT_HISTORY"

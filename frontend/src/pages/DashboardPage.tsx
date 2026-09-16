@@ -146,6 +146,28 @@ export function DashboardPage() {
               ? `${snapshot.snapshot.effective_start} to ${snapshot.snapshot.effective_end_exclusive}`
               : "Waiting for portfolio snapshot"}
           </p>
+
+          {portfolioId && selectedPortfolio ? (
+            <div className="mt-2 flex flex-wrap gap-4 text-sm font-semibold">
+              <Link
+                to={`/portfolios/${encodeURIComponent(
+                  portfolioId,
+                )}/analysis?range=${encodeURIComponent(range)}`}
+                className="text-blue-700 outline-none underline decoration-blue-200 underline-offset-4 hover:text-blue-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              >
+                View portfolio analysis →
+              </Link>
+
+              <Link
+                to={`/portfolios/${encodeURIComponent(
+                  portfolioId,
+                )}/manage?range=${encodeURIComponent(range)}`}
+                className="text-slate-700 outline-none underline decoration-slate-200 underline-offset-4 hover:text-slate-950 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              >
+                Manage portfolio & transactions
+              </Link>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap gap-1 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">

@@ -1,10 +1,3 @@
-"""Owned-portfolio analytics application service.
-
-This service composes ledger-derived daily performance, current valuation, the
-provider-neutral market-data boundary, and the framework-independent
-quantitative engine. It does not implement financial formulas itself.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -47,6 +40,7 @@ from portfolio_engine.performance.drawdown import (
 from portfolio_engine.performance.returns import (
     AnnualizedReturnResult,
     annualized_geometric_return,
+    rolling_cumulative_returns,
     simple_returns,
 )
 from portfolio_engine.performance.statistics import (
@@ -60,7 +54,13 @@ from portfolio_engine.risk.concentration import (
     NormalizedPortfolioWeights,
     portfolio_concentration,
 )
-from portfolio_engine.risk.relationships import BetaResult, ReturnObservation, beta
+from portfolio_engine.risk.relationships import (
+    BetaResult,
+    CorrelationResult,
+    ReturnObservation,
+    beta,
+    pearson_correlation,
+)
 
 
 class PortfolioAnalyticsError(ValueError):
@@ -73,6 +73,7 @@ class PortfolioAnalyticsWarningCode(StrEnum):
     SOURCE_WARNING = "SOURCE_WARNING"
     PERFORMANCE_UNAVAILABLE = "PERFORMANCE_UNAVAILABLE"
     INSUFFICIENT_HISTORY = "INSUFFICIENT_HISTORY"
+    INSUFFICIENT_ROLLING_HISTORY = "INSUFFICIENT_ROLLING_HISTORY"
     UNDEFINED_CAGR = "UNDEFINED_CAGR"
     UNDEFINED_SHARPE = "UNDEFINED_SHARPE"
     UNDEFINED_SORTINO = "UNDEFINED_SORTINO"
@@ -81,6 +82,7 @@ class PortfolioAnalyticsWarningCode(StrEnum):
     BENCHMARK_NO_DATA = "BENCHMARK_NO_DATA"
     BENCHMARK_PROVIDER_FAILED = "BENCHMARK_PROVIDER_FAILED"
     UNDEFINED_BETA = "UNDEFINED_BETA"
+    UNDEFINED_CORRELATION = "UNDEFINED_CORRELATION"
     CURRENT_VALUATION_INCOMPLETE = "CURRENT_VALUATION_INCOMPLETE"
     CURRENT_ALLOCATION_UNAVAILABLE = "CURRENT_ALLOCATION_UNAVAILABLE"
 
@@ -92,6 +94,14 @@ class PortfolioAnalyticsWarning:
     code: PortfolioAnalyticsWarningCode
     message: str
     observations: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RollingReturnObservation:
+    """One trailing rolling cumulative return at its historical endpoint."""
+
+    period_end: date
+    value: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +122,9 @@ class PortfolioAnalyticsResult:
     concentration: ConcentrationResult | None
     provenance: AnalyticalResultProvenance
     warnings: tuple[PortfolioAnalyticsWarning, ...]
+    benchmark_correlation: CorrelationResult | None = None
+    rolling_return_window: int | None = None
+    rolling_returns: tuple[RollingReturnObservation, ...] = ()
 
 
 def analyze_owned_portfolio(
@@ -125,15 +138,31 @@ def analyze_owned_portfolio(
     trading_calendar: TradingSessionCalendar,
     risk_free_rate_annual: float = DEFAULT_RISK_FREE_RATE,
     minimum_acceptable_return_annual: float = DEFAULT_MAR_ANNUAL,
+    rolling_window_size: int | None = None,
     executor: MarketBarQueryExecutor = execute_market_bar_query,
 ) -> PortfolioAnalyticsResult:
     """Calculate the Phase 4 owned-portfolio analytics set.
 
     Historical return/risk metrics use the completed adjusted-close daily TWR
     series. Current allocation and concentration use the completed raw-close
-    current valuation service. Benchmark beta uses adjusted-close benchmark
-    returns aligned by exact period-end dates through the Phase 3 beta kernel.
+    current valuation service. Benchmark beta and Pearson correlation use
+    adjusted-close benchmark returns aligned by exact period-end dates through
+    the Phase 3 relationship kernels.
+
+    Rolling returns are calculated only when ``rolling_window_size`` is
+    explicitly supplied. The window is a count of daily return observations,
+    not calendar days. No rolling-return window is assumed by this service.
     """
+    if rolling_window_size is not None:
+        if isinstance(rolling_window_size, bool) or not isinstance(
+            rolling_window_size,
+            int,
+        ):
+            raise TypeError("rolling_window_size must be an integer or None")
+
+        if rolling_window_size <= 0:
+            raise ValueError("rolling_window_size must be positive")
+
     performance = calculate_owned_portfolio_daily_performance(
         user=user,
         portfolio_id=portfolio_id,
@@ -170,7 +199,9 @@ def analyze_owned_portfolio(
     sortino: SortinoRatioResult | None = None
     drawdown: MaximumDrawdownResult | None = None
     beta_result: BetaResult | None = None
+    correlation_result: CorrelationResult | None = None
     benchmark_observations: int | None = None
+    rolling_returns: tuple[RollingReturnObservation, ...] = ()
 
     daily_returns: tuple[float, ...] = ()
     portfolio_return_observations: tuple[ReturnObservation, ...] = ()
@@ -231,12 +262,41 @@ def analyze_owned_portfolio(
                 sortino=sortino,
             )
 
+        if rolling_window_size is not None:
+            rolling_values = rolling_cumulative_returns(
+                daily_returns,
+                rolling_window_size,
+            )
+            rolling_returns = tuple(
+                RollingReturnObservation(
+                    period_end=performance.twr.daily_returns[index].valuation_date,
+                    value=value,
+                )
+                for index, value in enumerate(
+                    rolling_values,
+                    start=rolling_window_size - 1,
+                )
+            )
+
+            if not rolling_returns:
+                warnings.append(
+                    PortfolioAnalyticsWarning(
+                        code=(PortfolioAnalyticsWarningCode.INSUFFICIENT_ROLLING_HISTORY),
+                        message=(
+                            "Rolling return requires at least "
+                            f"{rolling_window_size} daily return observations."
+                        ),
+                        observations=len(daily_returns),
+                    )
+                )
+
         (
             beta_result,
+            correlation_result,
             benchmark_observations,
             benchmark_warnings,
             benchmark_symbol,
-        ) = _calculate_beta(
+        ) = _calculate_benchmark_relationships(
             performance=performance,
             portfolio_returns=portfolio_return_observations,
             resolver=resolver,
@@ -283,15 +343,21 @@ def analyze_owned_portfolio(
             )
         )
 
-    assumptions = (
+    assumptions_list = [
         "historical returns use adjusted_close",
         "current allocation uses raw close",
         "daily TWR treats DEPOSIT/WITHDRAWAL as external flows",
+        "benchmark correlation uses Pearson correlation on exact date intersections",
         f"risk_free_rate_annual={risk_free_rate_annual}",
         (f"minimum_acceptable_return_annual={minimum_acceptable_return_annual}"),
         f"minimum_general_stat_observations={MIN_GENERAL_STAT_OBS}",
         f"minimum_beta_observations={MIN_BETA_OBS}",
-    )
+    ]
+
+    if rolling_window_size is not None:
+        assumptions_list.append(f"rolling_return_window_observations={rolling_window_size}")
+
+    assumptions = tuple(assumptions_list)
     warning_messages = tuple(warning.message for warning in warnings)
 
     provenance = AnalyticalResultProvenance(
@@ -321,10 +387,13 @@ def analyze_owned_portfolio(
         concentration=concentration,
         provenance=provenance,
         warnings=tuple(warnings),
+        benchmark_correlation=correlation_result,
+        rolling_return_window=rolling_window_size,
+        rolling_returns=rolling_returns,
     )
 
 
-def _calculate_beta(
+def _calculate_benchmark_relationships(
     *,
     performance: DailyPortfolioPerformanceResult,
     portfolio_returns: tuple[ReturnObservation, ...],
@@ -333,6 +402,7 @@ def _calculate_beta(
     executor: MarketBarQueryExecutor,
 ) -> tuple[
     BetaResult | None,
+    CorrelationResult | None,
     int | None,
     tuple[PortfolioAnalyticsWarning, ...],
     str | None,
@@ -341,6 +411,7 @@ def _calculate_beta(
 
     if benchmark_asset_id is None:
         return (
+            None,
             None,
             None,
             (
@@ -378,6 +449,7 @@ def _calculate_beta(
     if symbol_result is None or symbol_result.status == MarketBarStatus.NOT_FOUND:
         return (
             None,
+            None,
             0,
             (
                 PortfolioAnalyticsWarning(
@@ -392,6 +464,7 @@ def _calculate_beta(
     if symbol_result.status == MarketBarStatus.NO_DATA:
         return (
             None,
+            None,
             0,
             (
                 PortfolioAnalyticsWarning(
@@ -405,6 +478,7 @@ def _calculate_beta(
 
     if symbol_result.status != MarketBarStatus.SUCCEEDED:
         return (
+            None,
             None,
             0,
             (
@@ -434,24 +508,43 @@ def _calculate_beta(
         performance=performance,
         price_by_date=price_by_date,
     )
-    result = beta(
+    beta_result = beta(
+        portfolio_returns,
+        benchmark_returns,
+    )
+    correlation_result = pearson_correlation(
         portfolio_returns,
         benchmark_returns,
     )
     warnings: list[PortfolioAnalyticsWarning] = []
 
-    if result.value is None:
-        message = result.warnings[0].message if result.warnings else "Beta is undefined."
+    if beta_result.value is None:
+        message = beta_result.warnings[0].message if beta_result.warnings else "Beta is undefined."
         warnings.append(
             PortfolioAnalyticsWarning(
                 code=PortfolioAnalyticsWarningCode.UNDEFINED_BETA,
                 message=message,
-                observations=result.observations,
+                observations=beta_result.observations,
+            )
+        )
+
+    if correlation_result.value is None:
+        message = (
+            correlation_result.warnings[0].message
+            if correlation_result.warnings
+            else "Correlation is undefined."
+        )
+        warnings.append(
+            PortfolioAnalyticsWarning(
+                code=PortfolioAnalyticsWarningCode.UNDEFINED_CORRELATION,
+                message=message,
+                observations=correlation_result.observations,
             )
         )
 
     return (
-        result,
+        beta_result,
+        correlation_result,
         len(benchmark_returns),
         tuple(warnings),
         benchmark_asset.symbol,

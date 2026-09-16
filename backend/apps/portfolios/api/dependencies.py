@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from django.conf import settings
 from django.utils import timezone
 
 from apps.market_data.api.dependencies import (
@@ -36,5 +37,20 @@ def get_trading_session_calendar() -> TradingSessionCalendar:
 
 
 def get_current_time() -> datetime:
-    """Return the timezone-aware clock used by current-holdings reads."""
-    return timezone.now()
+    """Return the timezone-aware clock used by current-holdings reads.
+
+    Normal application settings use wall-clock time. The isolated deterministic
+    demo settings may provide ``PORTFOLIO_FIXED_CURRENT_TIME`` so committed CSV
+    fixtures remain reproducible for local demonstrations and browser tests.
+    """
+    fixed_time = getattr(settings, "PORTFOLIO_FIXED_CURRENT_TIME", None)
+
+    if fixed_time is None:
+        return timezone.now()
+
+    if not isinstance(fixed_time, datetime) or timezone.is_naive(fixed_time):
+        raise TradingSessionCalendarUnavailable(
+            "PORTFOLIO_FIXED_CURRENT_TIME must be a timezone-aware datetime."
+        )
+
+    return fixed_time

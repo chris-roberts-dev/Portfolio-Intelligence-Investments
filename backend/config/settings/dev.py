@@ -22,7 +22,7 @@ MARKET_DATA_ALLOWED_PROVIDERS = tuple(
     provider.strip().lower()
     for provider in os.environ.get(
         "MARKET_DATA_ALLOWED_PROVIDERS",
-        "yfinance,mock",
+        "yfinance,mock,csv",
     ).split(",")
     if provider.strip()
 )

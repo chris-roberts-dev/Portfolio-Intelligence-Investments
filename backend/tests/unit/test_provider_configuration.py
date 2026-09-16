@@ -17,9 +17,11 @@ from apps.market_data.providers.configuration import (
     load_market_data_provider_configuration,
     resolve_market_data_provider,
 )
+from apps.market_data.providers.csv import CsvMarketDataProvider
 from apps.market_data.providers.mock import MockMarketDataProvider
 from apps.market_data.providers.registry import ProviderFactory
 from apps.market_data.providers.yfinance import YFinanceMarketDataProvider
+from config.settings import demo as demo_settings
 from config.settings import dev as dev_settings
 from config.settings import test as test_settings
 
@@ -71,11 +73,25 @@ def test_development_settings_resolve_yfinance_provider(
         provider = resolve_market_data_provider(configuration=configuration)
 
         assert configuration.default_provider == "yfinance"
-        assert configuration.allowed_providers == ("yfinance", "mock")
+        assert configuration.allowed_providers == ("yfinance", "mock", "csv")
         assert isinstance(provider, YFinanceMarketDataProvider)
         assert provider.name == "yfinance"
 
     importlib.reload(dev_settings)
+
+
+def test_demo_settings_resolve_committed_csv_provider() -> None:
+    configuration = load_market_data_provider_configuration(
+        default_provider=demo_settings.MARKET_DATA_DEFAULT_PROVIDER,
+        allowed_providers=demo_settings.MARKET_DATA_ALLOWED_PROVIDERS,
+    )
+
+    provider = resolve_market_data_provider(configuration=configuration)
+
+    assert configuration.default_provider == "csv"
+    assert configuration.allowed_providers == ("csv",)
+    assert isinstance(provider, CsvMarketDataProvider)
+    assert provider.name == "csv"
 
 
 def test_test_settings_resolve_deterministic_mock_provider() -> None:

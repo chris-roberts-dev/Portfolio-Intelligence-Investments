@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.11-bookworm
+        env:
+          POSTGRES_DB: portfolio_intelligence
+          POSTGRES_USER: portfolio_intelligence
+          POSTGRES_PASSWORD: ci-postgres-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U portfolio_intelligence -d portfolio_intelligence"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings.test
+      POSTGRES_DB: portfolio_intelligence
+      POSTGRES_USER: portfolio_intelligence
+      POSTGRES_PASSWORD: ci-postgres-password
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: "5432"
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.10.0"
+          python-version: "3.12.12"
+          enable-cache: true
+      - name: Sync backend dependencies
+        working-directory: backend
+        run: uv sync --frozen --all-groups
+      - name: Ruff lint
+        working-directory: backend
+        run: uv run ruff check .
+      - name: Ruff format check
+        working-directory: backend
+        run: uv run ruff format --check .
+      - name: Mypy
+        working-directory: backend
+        run: uv run mypy
+      - name: Django checks and migrations
+        working-directory: backend
+        run: |
+          uv run python manage.py check
+          uv run python manage.py makemigrations --check --dry-run
+          uv run python manage.py migrate --noinput
+          uv run python manage.py migrate --check
+      - name: Backend tests
+        working-directory: backend
+        run: uv run pytest -q --ds=config.settings.test
+      - name: OpenAPI drift
+        working-directory: backend
+        run: |
+          uv run python manage.py spectacular --fail-on-warn --validate --file openapi.generated.yaml
+          diff -u openapi.yaml openapi.generated.yaml
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.21.0"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Frontend typecheck
+        working-directory: frontend
+        run: npm run typecheck
+      - name: Frontend tests
+        working-directory: frontend
+        run: npm test
+      - name: Frontend build
+        working-directory: frontend
+        run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.10.0"
+          python-version: "3.12.12"
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.21.0"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Sync backend dependencies
+        working-directory: backend
+        run: uv sync --frozen --all-groups
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Deterministic Phase 4 browser suite
+        working-directory: frontend
+        run: npm run test:e2e

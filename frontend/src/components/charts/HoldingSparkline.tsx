@@ -1,12 +1,17 @@
+import type { EChartsOption } from "echarts";
 import { LineChart } from "echarts/charts";
 import { AriaComponent, GridComponent } from "echarts/components";
 import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 
-import { chartTheme } from "./chartTheme";
-import { formatCurrency, formatDate } from "../../features/dashboard/formatting";
+import {
+  formatCurrency,
+  formatDate,
+} from "../../features/dashboard/formatting";
 import type { HoldingSparklinePoint } from "../../types/dashboard";
+import { chartTheme } from "./chartTheme";
+import { useECharts } from "./useECharts";
 
 echarts.use([
   LineChart,
@@ -41,7 +46,8 @@ function sparklineSummary(
   currency: string,
 ): string {
   const available = rows.filter(
-    (row): row is SparklineRow & { value: number } => row.value !== null,
+    (row): row is SparklineRow & { value: number } =>
+      row.value !== null,
   );
   const missingCount = rows.length - available.length;
 
@@ -89,19 +95,13 @@ export function HoldingSparkline({
     [currency, rows, symbol],
   );
 
-  useEffect(() => {
-    const container = containerRef.current;
-
-    if (container === null || rows.length === 0) {
-      return undefined;
+  const option = useMemo<EChartsOption | null>(() => {
+    if (rows.length === 0) {
+      return null;
     }
 
-    const chart = echarts.init(container);
-    const reduceMotion =
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-
-    chart.setOption({
-      animation: !reduceMotion,
+    return {
+      animation: true,
       aria: {
         enabled: true,
         description: summary,
@@ -135,30 +135,15 @@ export function HoldingSparkline({
           data: rows.map((row) => [row.date, row.value]),
         },
       ],
-    });
-
-    const resize = () => chart.resize();
-    const observer =
-      typeof ResizeObserver === "undefined"
-        ? null
-        : new ResizeObserver(resize);
-
-    observer?.observe(container);
-    window.addEventListener("resize", resize);
-
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", resize);
-      chart.dispose();
     };
   }, [rows, summary]);
 
+  useECharts(containerRef, option, {
+    enabled: rows.length > 0,
+  });
+
   if (rows.length === 0) {
-    return (
-      <span className="text-xs text-slate-500">
-        No history
-      </span>
-    );
+    return <span className="text-xs text-slate-500">No history</span>;
   }
 
   return (

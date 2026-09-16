@@ -120,3 +120,29 @@ export async function apiPost<T, TBody extends object>(
 
   return parseResponse<T>(response);
 }
+export async function apiPatch<T, TBody extends object>(
+  path: string,
+  body: TBody,
+  options: { signal?: AbortSignal } = {},
+): Promise<T> {
+  const csrfToken = csrfTokenFromCookie();
+  const headers = new Headers({
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  });
+
+  if (csrfToken !== null) {
+    headers.set("X-CSRFToken", csrfToken);
+  }
+
+  const response = await fetch(`${apiBaseUrl()}${path}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(body),
+    signal: options.signal,
+  });
+
+  return parseResponse<T>(response);
+}
+
