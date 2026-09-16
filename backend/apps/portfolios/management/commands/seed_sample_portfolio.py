@@ -10,6 +10,7 @@ from __future__ import annotations
 from argparse import ArgumentParser
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from django.core.management.base import BaseCommand
@@ -44,7 +45,7 @@ class Command(BaseCommand):
         )
 
     @transaction.atomic
-    def handle(self, *args, **options) -> None:
+    def handle(self, *args: Any, **options: Any) -> None:
         user, _ = User.objects.get_or_create(
             email=SAMPLE_USER_EMAIL,
             defaults={
