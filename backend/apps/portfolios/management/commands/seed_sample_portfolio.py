@@ -7,6 +7,7 @@ No portfolio metric is precomputed or stored by this command.
 
 from __future__ import annotations
 
+from argparse import ArgumentParser
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
@@ -32,7 +33,7 @@ VERIFIED_AT = datetime(2026, 1, 2, 13, 0, tzinfo=UTC)
 class Command(BaseCommand):
     help = "Create or refresh the deterministic offline v0.1 sample portfolio."
 
-    def add_arguments(self, parser) -> None:
+    def add_arguments(self, parser: ArgumentParser) -> None:
         parser.add_argument(
             "--reset",
             action="store_true",
