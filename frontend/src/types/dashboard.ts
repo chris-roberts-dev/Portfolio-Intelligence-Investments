@@ -355,5 +355,85 @@ export interface DashboardSnapshotResult {
   holdings: DashboardHoldingsResult | null;
   movers: DashboardMoversResult | null;
   analytics: unknown | null;
-  review_items: unknown | null;
+  review_items: DashboardReviewItemsResult | null;
+}
+
+export type ReviewItemSeverity = "ERROR" | "WARNING" | "INFO";
+
+export type ReviewItemCategory =
+  | "MARKET_DATA"
+  | "DATA_COVERAGE"
+  | "PROVIDER"
+  | "VALUATION"
+  | "ANALYTICS";
+
+export type ReviewItemSource =
+  | "CURRENT_VALUATION"
+  | "DAILY_PERFORMANCE"
+  | "ANALYTICS";
+
+export type ReviewDrilldownResource =
+  | "HOLDINGS"
+  | "PERFORMANCE"
+  | "ANALYTICS";
+
+export interface DashboardReviewDrilldown {
+  resource: ReviewDrilldownResource;
+  portfolio_id: string;
+  requested_start: string;
+  requested_end_exclusive: string;
+  asset_id: string | null;
+  symbol: string | null;
+  observation_date: string | null;
+}
+
+export interface DashboardReviewItem {
+  key: string;
+  source: ReviewItemSource;
+  severity: ReviewItemSeverity;
+  category: ReviewItemCategory;
+  code: string;
+  message: string;
+  drilldown: DashboardReviewDrilldown;
+}
+
+export interface DashboardReviewCount<TKey extends string = string> {
+  key: TKey;
+  count: number;
+}
+
+export interface DashboardReviewCounts {
+  total: number;
+  by_severity: DashboardReviewCount<ReviewItemSeverity>[];
+  by_category: DashboardReviewCount<ReviewItemCategory>[];
+}
+
+export interface DashboardReviewFilters {
+  severity: ReviewItemSeverity | null;
+  category: ReviewItemCategory | null;
+}
+
+export interface DashboardReviewProvenance {
+  portfolio_id: string;
+  base_currency: string;
+  provider: string;
+  requested_start: string;
+  requested_end_exclusive: string;
+  effective_start: string;
+  effective_end_exclusive: string;
+  current_data_as_of: string | null;
+  historical_data_as_of: string | null;
+  analytics_as_of_date: string;
+  calculated_at: string;
+  engine_version: string;
+  included_sources: ReviewItemSource[];
+  ordering_rule: string;
+}
+
+export interface DashboardReviewItemsResult {
+  counts: DashboardReviewCounts;
+  filtered_count: number;
+  filters: DashboardReviewFilters;
+  items: DashboardReviewItem[];
+  provenance: DashboardReviewProvenance;
 }

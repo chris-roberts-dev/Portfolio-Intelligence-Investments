@@ -26,6 +26,11 @@ const MoversPanel = lazy(async () => {
   return { default: module.MoversPanel };
 });
 
+const ReviewItemsPanel = lazy(async () => {
+  const module = await import("./ReviewItemsPanel");
+  return { default: module.ReviewItemsPanel };
+});
+
 interface DashboardOverviewProps {
   snapshot: DashboardSnapshotResult | undefined;
   isLoading: boolean;
@@ -55,8 +60,10 @@ function DashboardSkeleton() {
         <Skeleton className="mt-4 h-10 w-56" />
         <Skeleton className="mt-7 h-72 w-full" />
       </section>
+
       <section className="rounded-3xl border border-slate-200 bg-white p-6 lg:col-span-4">
         <Skeleton className="h-5 w-40" />
+
         <div className="mt-6 space-y-4">
           {Array.from({ length: 6 }, (_, index) => (
             <Skeleton key={index} className="h-10 w-full" />
@@ -78,37 +85,17 @@ function AllocationSkeleton() {
           <Skeleton className="h-3 w-28" />
           <Skeleton className="mt-3 h-6 w-36" />
         </div>
+
         <Skeleton className="h-8 w-24" />
       </div>
+
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
         {Array.from({ length: 3 }, (_, index) => (
           <Skeleton key={index} className="h-24 w-full" />
         ))}
       </div>
-      <Skeleton className="mt-6 h-40 w-full" />
-    </section>
-  );
-}
 
-function MoversSkeleton() {
-  return (
-    <section
-      className="min-h-[26rem] rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
-      aria-label="Loading movers"
-    >
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <Skeleton className="h-3 w-32" />
-          <Skeleton className="mt-3 h-6 w-28" />
-        </div>
-        <Skeleton className="h-8 w-24" />
-      </div>
-      <Skeleton className="mt-6 h-11 w-full" />
-      <div className="mt-5 grid gap-3 lg:grid-cols-2">
-        {Array.from({ length: 4 }, (_, index) => (
-          <Skeleton key={index} className="h-40 w-full" />
-        ))}
-      </div>
+      <Skeleton className="mt-6 h-40 w-full" />
     </section>
   );
 }
@@ -124,11 +111,69 @@ function HoldingsSkeleton() {
           <Skeleton className="h-3 w-28" />
           <Skeleton className="mt-3 h-6 w-32" />
         </div>
+
         <Skeleton className="h-8 w-36" />
       </div>
+
       <div className="mt-8 space-y-3">
         {Array.from({ length: 5 }, (_, index) => (
           <Skeleton key={index} className="h-20 w-full" />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MoversSkeleton() {
+  return (
+    <section
+      className="min-h-[26rem] rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+      aria-label="Loading movers"
+    >
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <Skeleton className="h-3 w-32" />
+          <Skeleton className="mt-3 h-6 w-28" />
+        </div>
+
+        <Skeleton className="h-8 w-24" />
+      </div>
+
+      <Skeleton className="mt-6 h-11 w-full" />
+
+      <div className="mt-5 grid gap-3 lg:grid-cols-2">
+        {Array.from({ length: 4 }, (_, index) => (
+          <Skeleton key={index} className="h-40 w-full" />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReviewItemsSkeleton() {
+  return (
+    <section
+      className="min-h-[24rem] rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+      aria-label="Loading data-quality review items"
+    >
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <Skeleton className="h-3 w-28" />
+          <Skeleton className="mt-3 h-6 w-44" />
+        </div>
+
+        <Skeleton className="h-8 w-28" />
+      </div>
+
+      <div className="mt-6 flex flex-wrap gap-2">
+        {Array.from({ length: 4 }, (_, index) => (
+          <Skeleton key={index} className="h-9 w-24" />
+        ))}
+      </div>
+
+      <div className="mt-6 space-y-3">
+        {Array.from({ length: 3 }, (_, index) => (
+          <Skeleton key={index} className="h-32 w-full" />
         ))}
       </div>
     </section>
@@ -187,18 +232,21 @@ export function DashboardOverview({
   const allocationError = moduleError(snapshot, "ALLOCATION");
   const holdingsError = moduleError(snapshot, "HOLDINGS");
   const moversError = moduleError(snapshot, "MOVERS");
+  const reviewItemsError = moduleError(snapshot, "REVIEW_ITEMS");
+
   const hasUsableDashboard =
     snapshot.performance !== null ||
     snapshot.summary !== null ||
     snapshot.allocation !== null ||
     snapshot.holdings !== null ||
-    snapshot.movers !== null;
+    snapshot.movers !== null ||
+    snapshot.review_items !== null;
 
   if (!hasUsableDashboard) {
     return (
       <StatePanel
         title="Portfolio data is not available yet"
-        message="The dashboard snapshot loaded, but the performance, summary, allocation, holdings, and movers modules are unavailable for the selected period."
+        message="The dashboard snapshot loaded, but the performance, summary, allocation, holdings, movers, and review-items modules are unavailable for the selected period."
       />
     );
   }
@@ -232,6 +280,7 @@ export function DashboardOverview({
             moduleError={performanceError}
           />
         </div>
+
         <div className="lg:col-span-4">
           <PortfolioSummaryCard
             summary={snapshot.summary}
@@ -271,6 +320,19 @@ export function DashboardOverview({
               movers={snapshot.movers}
               portfolioId={snapshot.snapshot.portfolio_id}
               moduleError={moversError}
+            />
+          </Suspense>
+        </LazySection>
+      </div>
+
+      <div className="mt-5">
+        <LazySection fallback={<ReviewItemsSkeleton />}>
+          <Suspense fallback={<ReviewItemsSkeleton />}>
+            <ReviewItemsPanel
+              key={snapshot.snapshot.snapshot_id}
+              reviewItems={snapshot.review_items}
+              isSnapshotComplete={snapshot.is_complete}
+              moduleError={reviewItemsError}
             />
           </Suspense>
         </LazySection>
