@@ -40,7 +40,7 @@ class YFinanceAssetDiscoveryProvider:
     ) -> AssetDiscoveryResult:
         """Discover normalized symbols without fuzzy substitution."""
         requested_symbols = _normalize_symbols(symbols)
-        outcomes = []
+        outcomes: list[DiscoveredProviderAsset | AssetDiscoveryIssue] = []
 
         for requested_symbol in requested_symbols:
             try:

@@ -177,4 +177,4 @@ class OptimizationApiErrorSerializer(serializers.Serializer[object]):
 
 class OptimizationValidationErrorSerializer(serializers.Serializer[object]):
     code = serializers.CharField()
-    errors = serializers.DictField()
+    errors = serializers.DictField()  # type: ignore[assignment]  # DRF metaclass field

@@ -45,9 +45,9 @@ afterEach(() => {
 });
 
 describe(
-  "DashboardPage portfolio analysis navigation",
+  "DashboardPage portfolio tool navigation",
   () => {
-    it("preserves the selected portfolio and range in the analysis link", async () => {
+    it("preserves the selected portfolio and range in analysis and Allocation Lab links", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn((input: RequestInfo | URL) => {
@@ -122,6 +122,15 @@ describe(
       ).toHaveAttribute(
         "href",
         `/portfolios/${PORTFOLIO_ID}/analysis?range=6M`,
+      );
+
+      expect(
+        screen.getByRole("link", {
+          name: "Open Allocation Lab →",
+        }),
+      ).toHaveAttribute(
+        "href",
+        `/portfolios/${PORTFOLIO_ID}/allocation-lab?range=6M`,
       );
     });
   },

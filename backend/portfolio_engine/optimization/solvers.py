@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Sequence
+from typing import NoReturn
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy.optimize import OptimizeResult, linprog, minimize
+from scipy.optimize import LinearConstraint, linprog, minimize
 
 from portfolio_engine.config import (
     OPTIMIZATION_MAX_FRONTIER_POINTS,
@@ -342,12 +343,13 @@ def _solve_slsqp(
 ) -> tuple[float, ...]:
     expected = np.asarray(
         problem.expected_returns,
-        dtype=float,
+        dtype=np.float64,
     )
     covariance = np.asarray(
         problem.covariance,
-        dtype=float,
+        dtype=np.float64,
     )
+
     scipy_bounds = tuple(
         (
             bound.minimum,
@@ -356,19 +358,20 @@ def _solve_slsqp(
         for bound in problem.bounds
     )
 
-    constraints: list[dict[str, object]] = [
-        {
-            "type": "eq",
-            "fun": (lambda weights: float(np.sum(weights) - 1.0)),
-        }
+    constraint_rows: list[FloatArray] = [
+        np.ones(
+            len(problem.asset_keys),
+            dtype=np.float64,
+        ),
+    ]
+    constraint_values: list[float] = [
+        1.0,
     ]
 
     if target_return is not None:
-        constraints.append(
-            {
-                "type": "eq",
-                "fun": (lambda weights: float(expected @ weights - target_return)),
-            }
+        constraint_rows.append(expected)
+        constraint_values.append(
+            target_return,
         )
 
         initial = _linear_feasible_weights(
@@ -380,15 +383,26 @@ def _solve_slsqp(
             problem.bounds,
         )
 
-    result: OptimizeResult = minimize(
+    constraint_matrix = np.vstack(
+        constraint_rows,
+    )
+    constraint_targets = np.asarray(
+        constraint_values,
+        dtype=np.float64,
+    )
+
+    linear_constraint = LinearConstraint(
+        constraint_matrix,
+        lb=constraint_targets,
+        ub=constraint_targets,
+    )
+
+    result = minimize(
         objective,
-        x0=np.asarray(
-            initial,
-            dtype=float,
-        ),
+        x0=list(initial),
         method="SLSQP",
         bounds=scipy_bounds,
-        constraints=constraints,
+        constraints=linear_constraint,
         options={
             "ftol": SOLVER_TOLERANCE,
             "maxiter": MAX_SOLVER_ITERATIONS,
@@ -415,13 +429,13 @@ def _solve_slsqp(
             f"SciPy SLSQP failed: {result.message}.",
         )
 
-    weights = tuple(
-        float(value)
-        for value in np.asarray(
-            result.x,
-            dtype=float,
+    if result.x is None:
+        _raise(
+            OptimizationErrorCode.SOLVER_FAILED,
+            "SciPy SLSQP reported success without solution weights.",
         )
-    )
+
+    weights = tuple(float(value) for value in result.x)
 
     _validate_weights(
         problem,
@@ -437,7 +451,7 @@ def _feasible_return_range(
 ) -> tuple[float, float]:
     expected = np.asarray(
         problem.expected_returns,
-        dtype=float,
+        dtype=np.float64,
     )
     bounds = tuple(
         (
@@ -451,11 +465,11 @@ def _feasible_return_range(
             1,
             len(problem.asset_keys),
         ),
-        dtype=float,
+        dtype=np.float64,
     )
     b_eq = np.array(
         [1.0],
-        dtype=float,
+        dtype=np.float64,
     )
 
     minimum = linprog(
@@ -465,6 +479,7 @@ def _feasible_return_range(
         bounds=bounds,
         method="highs",
     )
+
     maximum = linprog(
         c=-expected,
         A_eq=a_eq,
@@ -473,15 +488,18 @@ def _feasible_return_range(
         method="highs",
     )
 
-    if not minimum.success or not maximum.success:
+    minimum_fun = minimum.fun
+    maximum_fun = maximum.fun
+
+    if not minimum.success or not maximum.success or minimum_fun is None or maximum_fun is None:
         _raise(
             OptimizationErrorCode.INFEASIBLE_CONSTRAINTS,
             ("Weight constraints do not admit a feasible expected-return range."),
         )
 
     return (
-        float(minimum.fun),
-        float(-maximum.fun),
+        float(minimum_fun),
+        -float(maximum_fun),
     )
 
 
@@ -492,18 +510,19 @@ def _linear_feasible_weights(
 ) -> tuple[float, ...]:
     expected = np.asarray(
         problem.expected_returns,
-        dtype=float,
+        dtype=np.float64,
     )
 
     result = linprog(
         c=np.zeros(
             len(problem.asset_keys),
-            dtype=float,
+            dtype=np.float64,
         ),
         A_eq=np.vstack(
             [
                 np.ones(
                     len(problem.asset_keys),
+                    dtype=np.float64,
                 ),
                 expected,
             ]
@@ -513,7 +532,7 @@ def _linear_feasible_weights(
                 1.0,
                 target_return,
             ],
-            dtype=float,
+            dtype=np.float64,
         ),
         bounds=tuple(
             (
@@ -525,13 +544,15 @@ def _linear_feasible_weights(
         method="highs",
     )
 
-    if not result.success:
+    solution = result.x
+
+    if not result.success or solution is None:
         _raise(
             OptimizationErrorCode.INFEASIBLE_CONSTRAINTS,
             (f"Target return {target_return:.12g} is infeasible under configured bounds."),
         )
 
-    return tuple(float(value) for value in result.x)
+    return tuple(float(value) for value in solution)
 
 
 def _deterministic_feasible_weights(
@@ -593,15 +614,15 @@ def _portfolio_result(
 
     weight_array = np.asarray(
         normalized,
-        dtype=float,
+        dtype=np.float64,
     )
     expected = np.asarray(
         problem.expected_returns,
-        dtype=float,
+        dtype=np.float64,
     )
     covariance = np.asarray(
         problem.covariance,
-        dtype=float,
+        dtype=np.float64,
     )
 
     expected_return = float(expected @ weight_array)
@@ -692,11 +713,11 @@ def _validate_weights(
         actual = float(
             np.asarray(
                 problem.expected_returns,
-                dtype=float,
+                dtype=np.float64,
             )
             @ np.asarray(
                 normalized,
-                dtype=float,
+                dtype=np.float64,
             )
         )
 
@@ -734,7 +755,7 @@ def _finite(
 def _raise(
     code: OptimizationErrorCode,
     message: str,
-) -> None:
+) -> NoReturn:
     raise OptimizationError(
         code,
         message,

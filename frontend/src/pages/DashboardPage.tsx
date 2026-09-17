@@ -161,6 +161,15 @@ export function DashboardPage() {
               <Link
                 to={`/portfolios/${encodeURIComponent(
                   portfolioId,
+                )}/allocation-lab?range=${encodeURIComponent(range)}`}
+                className="text-violet-700 outline-none underline decoration-violet-200 underline-offset-4 hover:text-violet-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              >
+                Open Allocation Lab →
+              </Link>
+
+              <Link
+                to={`/portfolios/${encodeURIComponent(
+                  portfolioId,
                 )}/manage?range=${encodeURIComponent(range)}`}
                 className="text-slate-700 outline-none underline decoration-slate-200 underline-offset-4 hover:text-slate-950 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
               >

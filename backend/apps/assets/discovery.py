@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -26,7 +28,7 @@ class DjangoDiscoveredAssetCatalog:
         discovered: DiscoveredProviderAsset,
         *,
         provider: str,
-    ):
+    ) -> UUID:
         """Reuse or create canonical identity and exactly one provider mapping."""
         normalized_provider = provider.strip().lower()
 
