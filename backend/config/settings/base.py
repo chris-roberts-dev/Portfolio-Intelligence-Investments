@@ -142,5 +142,7 @@ SPECTACULAR_SETTINGS = {
         "PortfolioSummaryUnavailableReasonEnum": (
             "apps.portfolios.services.dashboard_summary.PortfolioSummaryUnavailableReason"
         ),
+        "OptimizationRunMethodEnum": "apps.optimization.models.OptimizationRunMethod",
+        "OptimizationRunStatusEnum": "apps.optimization.models.OptimizationRunStatus",
     },
 }

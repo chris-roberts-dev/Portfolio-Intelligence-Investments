@@ -15,14 +15,19 @@ PURE_MARKET_DATA_PATHS = (
     BACKEND_ROOT / "portfolio_engine" / "contracts" / "provider_execution.py",
     BACKEND_ROOT / "apps" / "market_data" / "contracts.py",
     BACKEND_ROOT / "apps" / "market_data" / "providers" / "base.py",
+    BACKEND_ROOT / "apps" / "market_data" / "providers" / "discovery_base.py",
     BACKEND_ROOT / "apps" / "market_data" / "providers" / "registry.py",
     BACKEND_ROOT / "apps" / "market_data" / "providers" / "mock.py",
     BACKEND_ROOT / "apps" / "market_data" / "providers" / "csv.py",
     BACKEND_ROOT / "apps" / "market_data" / "services" / "asset_resolution.py",
+    BACKEND_ROOT / "apps" / "market_data" / "services" / "asset_discovery.py",
     BACKEND_ROOT / "apps" / "market_data" / "services" / "market_bar_query.py",
 )
 
-YFINANCE_ADAPTER_PATH = BACKEND_ROOT / "apps" / "market_data" / "providers" / "yfinance.py"
+YFINANCE_ADAPTER_PATHS = (
+    BACKEND_ROOT / "apps" / "market_data" / "providers" / "yfinance.py",
+    BACKEND_ROOT / "apps" / "market_data" / "providers" / "yfinance_discovery.py",
+)
 
 FORBIDDEN_PURE_IMPORT_ROOTS = {
     "alpaca",
@@ -91,8 +96,8 @@ def test_pure_market_data_boundaries_avoid_forbidden_dependencies() -> None:
     assert violations == {}
 
 
-def test_yfinance_sdk_loading_is_confined_to_yfinance_adapter() -> None:
-    """Only the dedicated adapter may load the yfinance provider package."""
+def test_yfinance_sdk_loading_is_confined_to_yfinance_adapters() -> None:
+    """Only dedicated yfinance adapters may load the yfinance provider package."""
     import_sites: list[str] = []
 
     for root in (
@@ -106,4 +111,6 @@ def test_yfinance_sdk_loading_is_confined_to_yfinance_adapter() -> None:
             if "yfinance" in imported:
                 import_sites.append(str(path.relative_to(BACKEND_ROOT)))
 
-    assert import_sites == [str(YFINANCE_ADAPTER_PATH.relative_to(BACKEND_ROOT))]
+    expected_sites = sorted(str(path.relative_to(BACKEND_ROOT)) for path in YFINANCE_ADAPTER_PATHS)
+
+    assert import_sites == expected_sites

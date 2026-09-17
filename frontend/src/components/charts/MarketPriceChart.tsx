@@ -8,7 +8,11 @@ import {
 } from "echarts/components";
 import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
-import { useMemo, useRef } from "react";
+import {
+  memo,
+  useMemo,
+  useRef,
+} from "react";
 
 import { formatDate } from "../../features/dashboard/formatting";
 import type { MarketBarSymbolResult } from "../../types/marketData";
@@ -39,15 +43,17 @@ function formatPrice(value: number | null): string {
   }).format(value);
 }
 
-export function MarketPriceChart({
+export const MarketPriceChart = memo(function MarketPriceChart({
   results,
 }: MarketPriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+
   const successful = useMemo(
     () =>
       results.filter(
         (result) =>
-          result.status === "SUCCEEDED" && result.bars.length > 0,
+          result.status === "SUCCEEDED" &&
+          result.bars.length > 0,
       ),
     [results],
   );
@@ -74,27 +80,39 @@ export function MarketPriceChart({
       legend: {
         top: 0,
         left: 0,
-        textStyle: { color: chartTheme.axisText },
+        textStyle: {
+          color: chartTheme.axisText,
+        },
       },
       tooltip: {
         trigger: "axis",
         backgroundColor: chartTheme.tooltipBackground,
         borderWidth: 0,
-        textStyle: { color: chartTheme.tooltipText },
+        textStyle: {
+          color: chartTheme.tooltipText,
+        },
       },
       xAxis: {
         type: "time",
         axisLine: {
-          lineStyle: { color: chartTheme.gridline },
+          lineStyle: {
+            color: chartTheme.gridline,
+          },
         },
-        axisLabel: { color: chartTheme.axisText },
+        axisLabel: {
+          color: chartTheme.axisText,
+        },
       },
       yAxis: {
         type: "value",
         scale: true,
-        axisLabel: { color: chartTheme.axisText },
+        axisLabel: {
+          color: chartTheme.axisText,
+        },
         splitLine: {
-          lineStyle: { color: chartTheme.gridline },
+          lineStyle: {
+            color: chartTheme.gridline,
+          },
         },
       },
       series: successful.map((result) => ({
@@ -103,7 +121,10 @@ export function MarketPriceChart({
         showSymbol: false,
         connectNulls: false,
         smooth: false,
-        data: result.bars.map((bar) => [bar.trade_date, bar.close]),
+        data: result.bars.map((bar) => [
+          bar.trade_date,
+          bar.close,
+        ]),
       })),
     };
   }, [successful]);
@@ -135,12 +156,21 @@ export function MarketPriceChart({
           <table className="w-full min-w-[560px] border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500">
-                <th className="py-2 pr-4 font-semibold">Symbol</th>
-                <th className="py-2 pr-4 font-semibold">Date</th>
-                <th className="py-2 pr-4 font-semibold">Close</th>
-                <th className="py-2 pr-4 font-semibold">Source</th>
+                <th className="py-2 pr-4 font-semibold">
+                  Symbol
+                </th>
+                <th className="py-2 pr-4 font-semibold">
+                  Date
+                </th>
+                <th className="py-2 pr-4 font-semibold">
+                  Close
+                </th>
+                <th className="py-2 pr-4 font-semibold">
+                  Source
+                </th>
               </tr>
             </thead>
+
             <tbody>
               {successful.flatMap((result) =>
                 result.bars.map((bar) => (
@@ -151,12 +181,15 @@ export function MarketPriceChart({
                     <td className="py-2 pr-4 font-semibold text-slate-900">
                       {result.symbol}
                     </td>
+
                     <td className="py-2 pr-4 text-slate-700">
                       {formatDate(bar.trade_date)}
                     </td>
+
                     <td className="py-2 pr-4 tabular-nums text-slate-700">
                       {formatPrice(bar.close)}
                     </td>
+
                     <td className="py-2 pr-4 text-slate-700">
                       {bar.source}
                     </td>
@@ -169,4 +202,4 @@ export function MarketPriceChart({
       </details>
     </div>
   );
-}
+});

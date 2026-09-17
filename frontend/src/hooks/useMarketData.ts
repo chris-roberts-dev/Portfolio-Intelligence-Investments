@@ -3,12 +3,15 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchMarketBars } from "../api/marketData";
 import type { MarketBarQueryRequest } from "../types/marketData";
 
+export const MARKET_DATA_STALE_TIME_MS = 5 * 60 * 1000;
+export const MARKET_DATA_GC_TIME_MS = 30 * 60 * 1000;
+
 export function marketBarQueryKey(
   request: MarketBarQueryRequest | null,
 ) {
   return request === null
-    ? ["market-data", "bars", "disabled"] as const
-    : [
+    ? (["market-data", "bars", "disabled"] as const)
+    : ([
         "market-data",
         "bars",
         request.symbols,
@@ -16,7 +19,7 @@ export function marketBarQueryKey(
         request.end,
         request.interval,
         request.provider ?? null,
-      ] as const;
+      ] as const);
 }
 
 export function useMarketBarQuery(
@@ -33,6 +36,21 @@ export function useMarketBarQuery(
     },
     enabled: request !== null,
     retry: 1,
-    staleTime: 30_000,
+
+    // Historical market-data responses are stable enough to remain fresh
+    // locally for several minutes. Explicit Query/Retry actions remain the
+    // authoritative way to request fresh provider data.
+    staleTime: MARKET_DATA_STALE_TIME_MS,
+
+    // Keep inactive queries in memory so navigating elsewhere in the app for
+    // a short period does not immediately discard potentially large responses.
+    gcTime: MARKET_DATA_GC_TIME_MS,
+
+    // Market Data Explorer uses explicit submission. Changing browser focus,
+    // restoring connectivity, or remounting the query must not unexpectedly
+    // generate another live-provider request.
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   });
 }

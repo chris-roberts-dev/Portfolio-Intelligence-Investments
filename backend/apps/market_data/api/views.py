@@ -13,7 +13,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.market_data.api.dependencies import get_asset_resolver
+from apps.market_data.api.dependencies import (
+    get_asset_catalog_writer,
+    get_asset_discovery_provider,
+    get_asset_resolver,
+)
 from apps.market_data.api.policies import (
     MarketBarQueryThrottle,
     MarketDataProviderAuthorizationError,
@@ -32,9 +36,11 @@ from apps.market_data.providers.configuration import (
 )
 from apps.market_data.providers.registry import ProviderRegistryError
 from apps.market_data.providers.safety import sanitize_provider_message
+from apps.market_data.services.asset_discovery import (
+    execute_market_bar_query_with_discovery,
+)
 from apps.market_data.services.market_bar_query import (
     MarketBarOrchestrationError,
-    execute_market_bar_query,
 )
 
 
@@ -145,11 +151,17 @@ def market_bar_query_view(request: Request) -> Response:
             str(exc),
         )
 
+    discovery_provider = get_asset_discovery_provider(
+        provider.name,
+    )
+
     try:
-        result = execute_market_bar_query(
+        result = execute_market_bar_query_with_discovery(
             query,
             resolver=get_asset_resolver(),
             provider=provider,
+            discovery_provider=discovery_provider,
+            catalog_writer=(get_asset_catalog_writer() if discovery_provider is not None else None),
         )
     except MarketBarOrchestrationError as exc:
         return Response(

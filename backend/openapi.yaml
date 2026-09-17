@@ -265,6 +265,99 @@ paths:
               schema:
                 $ref: '#/components/schemas/MarketBarApiError'
           description: The configured provider was unavailable or could not be attempted.
+  /api/v1/optimization-runs/:
+    get:
+      operationId: optimization_run_list
+      description: List optimization runs owned by the authenticated user.
+      tags:
+      - optimization
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OptimizationRun'
+          description: ''
+    post:
+      operationId: optimization_run_create
+      description: Create and synchronously execute one persisted historical optimization
+        run. Failed domain/solver executions remain auditable as FAILED run resources.
+      tags:
+      - optimization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OptimizationRunCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OptimizationRunCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OptimizationRunCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OptimizationRun'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OptimizationValidationError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OptimizationApiError'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OptimizationApiError'
+          description: ''
+  /api/v1/optimization-runs/{run_id}/:
+    get:
+      operationId: optimization_run_detail
+      description: Return one optimization run owned by the authenticated user.
+      parameters:
+      - in: path
+        name: run_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - optimization
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OptimizationRun'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OptimizationApiError'
+          description: Run does not exist in the authenticated user's scope.
   /api/v1/portfolios/:
     get:
       operationId: portfolio_list
@@ -3410,6 +3503,322 @@ components:
     NullEnum:
       enum:
       - null
+    OptimizationApiError:
+      type: object
+      properties:
+        code:
+          type: string
+        detail:
+          type: string
+      required:
+      - code
+      - detail
+    OptimizationResult:
+      type: object
+      properties:
+        portfolio:
+          allOf:
+          - $ref: '#/components/schemas/OptimizedPortfolio'
+          readOnly: true
+          nullable: true
+        frontier:
+          type: array
+          items:
+            $ref: '#/components/schemas/OptimizedPortfolio'
+          readOnly: true
+      required:
+      - frontier
+      - portfolio
+    OptimizationRun:
+      type: object
+      description: Public persisted optimization-run response schema.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        portfolio_id:
+          type: string
+          format: uuid
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/OptimizationRunStatusEnum'
+          readOnly: true
+        method:
+          allOf:
+          - $ref: '#/components/schemas/OptimizationRunMethodEnum'
+          readOnly: true
+        included_asset_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          readOnly: true
+        parameters:
+          readOnly: true
+        result:
+          allOf:
+          - $ref: '#/components/schemas/OptimizationResult'
+          readOnly: true
+          nullable: true
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/OptimizationRunWarning'
+          readOnly: true
+        failure_code:
+          type: string
+          readOnly: true
+        failure_message:
+          type: string
+          readOnly: true
+        started_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        provenance:
+          allOf:
+          - $ref: '#/components/schemas/OptimizationRunProvenance'
+          readOnly: true
+      required:
+      - completed_at
+      - created_at
+      - failure_code
+      - failure_message
+      - id
+      - included_asset_ids
+      - method
+      - parameters
+      - portfolio_id
+      - provenance
+      - result
+      - started_at
+      - status
+      - warnings
+    OptimizationRunCreateRequest:
+      type: object
+      description: Request contract for one synchronous persisted optimization run.
+      properties:
+        portfolio_id:
+          type: string
+          format: uuid
+        method:
+          $ref: '#/components/schemas/OptimizationRunMethodEnum'
+        start:
+          type: string
+          format: date
+        end:
+          type: string
+          format: date
+        asset_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          maxItems: 50
+        bounds:
+          type: array
+          items:
+            $ref: '#/components/schemas/OptimizationWeightBound'
+        risk_free_rate_annual:
+          type: number
+          format: double
+          default: 0.0
+        frontier_points:
+          type: integer
+          maximum: 100
+          minimum: 2
+          default: 25
+      required:
+      - end
+      - method
+      - portfolio_id
+      - start
+    OptimizationRunMethodEnum:
+      enum:
+      - EQUAL_WEIGHT
+      - MINIMUM_VARIANCE
+      - MAXIMUM_SHARPE
+      - EFFICIENT_FRONTIER
+      type: string
+      description: |-
+        * `EQUAL_WEIGHT` - Equal weight
+        * `MINIMUM_VARIANCE` - Minimum variance
+        * `MAXIMUM_SHARPE` - Maximum Sharpe
+        * `EFFICIENT_FRONTIER` - Efficient frontier
+    OptimizationRunProvenance:
+      type: object
+      properties:
+        period_start:
+          type: string
+          format: date
+          readOnly: true
+        period_end_exclusive:
+          type: string
+          format: date
+          readOnly: true
+        provider:
+          type: string
+          readOnly: true
+        price_field:
+          type: string
+          readOnly: true
+        annualization_factor:
+          type: integer
+          readOnly: true
+        risk_free_rate_annual:
+          type: number
+          format: double
+          readOnly: true
+        benchmark_asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        engine_version:
+          type: string
+          readOnly: true
+        method_version:
+          type: string
+          readOnly: true
+        data_retrieved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        data_fingerprint:
+          type: string
+          readOnly: true
+      required:
+      - annualization_factor
+      - benchmark_asset_id
+      - data_fingerprint
+      - data_retrieved_at
+      - engine_version
+      - method_version
+      - period_end_exclusive
+      - period_start
+      - price_field
+      - provider
+      - risk_free_rate_annual
+    OptimizationRunStatusEnum:
+      enum:
+      - PENDING
+      - RUNNING
+      - SUCCEEDED
+      - FAILED
+      type: string
+      description: |-
+        * `PENDING` - Pending
+        * `RUNNING` - Running
+        * `SUCCEEDED` - Succeeded
+        * `FAILED` - Failed
+    OptimizationRunWarning:
+      type: object
+      properties:
+        code:
+          type: string
+          readOnly: true
+        message:
+          type: string
+          readOnly: true
+      required:
+      - code
+      - message
+    OptimizationValidationError:
+      type: object
+      properties:
+        code:
+          type: string
+        errors:
+          type: object
+          additionalProperties: {}
+      required:
+      - code
+      - errors
+    OptimizationWeight:
+      type: object
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        weight:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - asset_id
+      - weight
+    OptimizationWeightBound:
+      type: object
+      description: Optional per-asset long-only bound override.
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+        minimum:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+        maximum:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+      required:
+      - asset_id
+      - maximum
+      - minimum
+    OptimizedPortfolio:
+      type: object
+      properties:
+        method:
+          allOf:
+          - $ref: '#/components/schemas/OptimizationRunMethodEnum'
+          readOnly: true
+        weights:
+          type: array
+          items:
+            $ref: '#/components/schemas/OptimizationWeight'
+          readOnly: true
+        expected_return:
+          type: number
+          format: double
+          readOnly: true
+        expected_volatility:
+          type: number
+          format: double
+          readOnly: true
+        sharpe_ratio:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        target_return:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+      required:
+      - expected_return
+      - expected_volatility
+      - method
+      - sharpe_ratio
+      - target_return
+      - weights
     PatchedPortfolioBenchmarkRequest:
       type: object
       description: Select or clear one canonical benchmark asset for an owned portfolio.
