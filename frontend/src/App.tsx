@@ -9,6 +9,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { MarketDataExplorerPage } from "./pages/MarketDataExplorerPage";
 import { PortfolioAnalysisPage } from "./pages/PortfolioAnalysisPage";
 import { PortfolioManagementPage } from "./pages/PortfolioManagementPage";
+import { PortfoliosPage } from "./pages/PortfoliosPage";
 
 function NotFoundPage() {
   return (
@@ -35,6 +36,7 @@ export function App() {
 
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<HomePage />} />
+        <Route path="/portfolios" element={<PortfoliosPage />} />
 
         <Route
           path="/portfolios/:portfolioId/dashboard"
@@ -46,10 +48,7 @@ export function App() {
           element={<PortfolioAnalysisPage />}
         />
 
-        <Route
-          path="/allocation-lab"
-          element={<AllocationLabPage />}
-        />
+        <Route path="/allocation-lab" element={<AllocationLabPage />} />
 
         <Route
           path="/portfolios/:portfolioId/allocation-lab"
@@ -66,10 +65,7 @@ export function App() {
           element={<HoldingDetailPage />}
         />
 
-        <Route
-          path="/market-data"
-          element={<MarketDataExplorerPage />}
-        />
+        <Route path="/market-data" element={<MarketDataExplorerPage />} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />

@@ -1,0 +1,66 @@
+import {
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
+
+import { AUTH_SESSION_QUERY_KEY } from "../hooks/useAuth";
+import { DashboardShell } from "./DashboardShell";
+
+function renderShell(pathname: string) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+  queryClient.setQueryData(AUTH_SESSION_QUERY_KEY, {
+    authenticated: true,
+    user: {
+      id: "00000000-0000-0000-0000-000000000001",
+      email: "owner@example.com",
+      first_name: "Portfolio",
+      last_name: "Owner",
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[pathname]}>
+        <DashboardShell header={<h1>Page heading</h1>}>
+          <p>Page content</p>
+        </DashboardShell>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+describe("DashboardShell", () => {
+  it("renders visible primary-domain labels and identifies the current destination", () => {
+    renderShell("/portfolios/example/dashboard");
+
+    expect(screen.getAllByRole("link", { name: "Overview" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Portfolios" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Market data" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Allocation Lab" }).length).toBeGreaterThan(0);
+
+    expect(
+      screen.getAllByRole("link", { name: "Portfolios" }).some(
+        (link) => link.getAttribute("aria-current") === "page",
+      ),
+    ).toBe(true);
+  });
+
+  it("provides an accessible mobile navigation drawer", () => {
+    renderShell("/");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open navigation" }));
+
+    expect(
+      screen.getByRole("button", { name: "Close navigation panel" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Portfolios" }).length).toBeGreaterThan(1);
+  });
+});
