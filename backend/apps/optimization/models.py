@@ -35,8 +35,15 @@ class OptimizationRunMethod(models.TextChoices):
     EFFICIENT_FRONTIER = "EFFICIENT_FRONTIER", "Efficient frontier"
 
 
+class OptimizationRunSource(models.TextChoices):
+    """Explicit analytical source for one persisted optimization run."""
+
+    PORTFOLIO = "PORTFOLIO", "Portfolio"
+    AD_HOC = "AD_HOC", "Ad hoc"
+
+
 class OptimizationRun(models.Model):
-    """Auditable synchronous optimization run with reproducibility metadata."""
+    """Auditable optimization run for either an owned portfolio or ad hoc universe."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(
@@ -44,9 +51,16 @@ class OptimizationRun(models.Model):
         on_delete=models.CASCADE,
         related_name="optimization_runs",
     )
+    source_type = models.CharField(
+        max_length=16,
+        choices=OptimizationRunSource.choices,
+        default=OptimizationRunSource.PORTFOLIO,
+    )
     portfolio = models.ForeignKey(
         "portfolios.Portfolio",
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="optimization_runs",
     )
     benchmark_asset = models.ForeignKey(
@@ -73,6 +87,7 @@ class OptimizationRun(models.Model):
         default=Decimal("0"),
     )
     included_asset_ids = models.JSONField(default=list)
+    baseline_weights = models.JSONField(default=list, blank=True)
     parameters = models.JSONField(default=dict)
     result = models.JSONField(null=True, blank=True)
     warnings = models.JSONField(default=list, blank=True)
@@ -91,7 +106,7 @@ class OptimizationRun(models.Model):
         ordering = ("-created_at", "id")
 
     def __str__(self) -> str:
-        return f"{self.method} {self.id} ({self.status})"
+        return f"{self.source_type}:{self.method} {self.id} ({self.status})"
 
     def clean(self) -> None:
         """Reject internally inconsistent or non-finite persisted run state."""
@@ -108,8 +123,21 @@ class OptimizationRun(models.Model):
             errors["engine_version"] = "engine_version must not be blank."
         if not self.method_version.strip():
             errors["method_version"] = "method_version must not be blank."
-        if self.user_id and self.portfolio_id and self.portfolio.user_id != self.user_id:
-            errors["portfolio"] = "portfolio must belong to the run owner."
+
+        source_type = OptimizationRunSource(self.source_type)
+        if source_type is OptimizationRunSource.PORTFOLIO:
+            portfolio = self.portfolio
+            if portfolio is None:
+                errors["portfolio"] = "Portfolio-scoped runs require a portfolio."
+            elif self.user_id and portfolio.user_id != self.user_id:
+                errors["portfolio"] = "portfolio must belong to the run owner."
+        else:
+            if self.portfolio_id is not None:
+                errors["portfolio"] = "Ad hoc optimization runs cannot reference a portfolio."
+            if self.benchmark_asset_id is not None:
+                errors["benchmark_asset"] = (
+                    "Ad hoc optimization runs do not inherit a portfolio benchmark."
+                )
 
         status = OptimizationRunStatus(self.status)
         if status in (OptimizationRunStatus.PENDING, OptimizationRunStatus.RUNNING):
@@ -133,6 +161,8 @@ class OptimizationRun(models.Model):
                 errors["completed_at"] = "Failed runs require completed_at."
 
         try:
+            _validate_json_finite(self.included_asset_ids)
+            _validate_json_finite(self.baseline_weights)
             _validate_json_finite(self.parameters)
             _validate_json_finite(self.result)
             _validate_json_finite(self.warnings)

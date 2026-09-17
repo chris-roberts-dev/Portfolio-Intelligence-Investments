@@ -15,11 +15,13 @@ import {
   fetchPortfolios,
   previewPortfolioTransactionImport,
   renamePortfolio,
+  resolveAssets,
   updatePortfolioBenchmark,
   type DashboardSnapshotRequest,
   type PortfolioAnalyticsRequest,
 } from "../api/portfolios";
 import type {
+  AssetResolveRequest,
   PortfolioBenchmarkRequest,
   PortfolioCreateRequest,
   PortfolioRenameRequest,
@@ -84,6 +86,20 @@ export function useAssetCatalog() {
     queryKey: ASSET_CATALOG_QUERY_KEY,
     queryFn: ({ signal }) => fetchAssetCatalog(signal),
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+
+export function useResolveAssets() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (request: AssetResolveRequest) => resolveAssets(request),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ASSET_CATALOG_QUERY_KEY,
+      });
+    },
   });
 }
 

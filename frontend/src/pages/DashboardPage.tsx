@@ -2,7 +2,6 @@ import { useMemo, type ChangeEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 
 import { StatePanel } from "../components/ui/StatePanel";
-import { DashboardShell } from "../layouts/DashboardShell";
 import { DashboardOverview } from "../features/dashboard/DashboardOverview";
 import {
   DASHBOARD_RANGES,
@@ -11,6 +10,7 @@ import {
 } from "../features/dashboard/dateRange";
 import { formatDateTime } from "../features/dashboard/formatting";
 import { useDashboardSnapshot, usePortfolios } from "../hooks/usePortfolioData";
+import { DashboardShell } from "../layouts/DashboardShell";
 import type { PerformanceDataQuality } from "../types/dashboard";
 
 function isDashboardRange(value: string | null): value is DashboardRange {
@@ -159,9 +159,9 @@ export function DashboardPage() {
               </Link>
 
               <Link
-                to={`/portfolios/${encodeURIComponent(
+                to={`/allocation-lab?portfolio=${encodeURIComponent(
                   portfolioId,
-                )}/allocation-lab?range=${encodeURIComponent(range)}`}
+                )}&range=${encodeURIComponent(range)}`}
                 className="text-violet-700 outline-none underline decoration-violet-200 underline-offset-4 hover:text-violet-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
               >
                 Open Allocation Lab →

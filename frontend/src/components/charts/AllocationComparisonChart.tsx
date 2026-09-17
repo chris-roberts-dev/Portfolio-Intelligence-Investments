@@ -33,6 +33,7 @@ export interface AllocationComparisonRow {
 
 interface AllocationComparisonChartProps {
   rows: AllocationComparisonRow[];
+  baselineLabel?: string;
 }
 
 function formatPercent(value: number | null): string {
@@ -55,6 +56,7 @@ function chartPercent(value: number): string {
 
 export function AllocationComparisonChart({
   rows,
+  baselineLabel = "Current observed",
 }: AllocationComparisonChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -68,7 +70,7 @@ export function AllocationComparisonChart({
       aria: {
         enabled: true,
         description:
-          "Observed current allocation compared with available persisted server optimization allocations. Missing optimization runs remain gaps.",
+          `${baselineLabel} allocation compared with available persisted server optimization allocations. Missing optimization runs remain gaps.`,
       },
       grid: {
         left: 12,
@@ -128,7 +130,7 @@ export function AllocationComparisonChart({
       },
       series: [
         {
-          name: "Current",
+          name: baselineLabel,
           type: "bar",
           data: rows.map(
             (row) => row.currentWeight,
@@ -159,7 +161,7 @@ export function AllocationComparisonChart({
         },
       ],
     };
-  }, [rows]);
+  }, [baselineLabel, rows]);
 
   useECharts(containerRef, option, {
     enabled: rows.length > 0,
@@ -176,14 +178,13 @@ export function AllocationComparisonChart({
         className="h-[30rem] w-full"
         role="img"
         tabIndex={0}
-        aria-label="Current and optimized allocation comparison chart"
+        aria-label={`${baselineLabel} and optimized allocation comparison chart`}
       />
 
       <div className="mt-4 overflow-x-auto">
         <table className="w-full min-w-[760px] border-collapse text-left text-xs">
           <caption className="sr-only">
-            Current observed allocation and
-            available persisted optimization
+            {baselineLabel} allocation and available persisted optimization
             allocations by asset.
           </caption>
 
@@ -193,7 +194,7 @@ export function AllocationComparisonChart({
                 Asset
               </th>
               <th className="py-2 pr-4 font-semibold">
-                Current
+                {baselineLabel}
               </th>
               <th className="py-2 pr-4 font-semibold">
                 Equal weight

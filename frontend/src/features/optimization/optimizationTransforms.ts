@@ -1,14 +1,18 @@
 import type {
   OptimizationRun,
   OptimizationRunMethod,
+  OptimizationRunSource,
   OptimizationWeightBoundRequest,
 } from "../../types/optimization";
 
 export interface OptimizationControlContext {
+  sourceType: OptimizationRunSource;
+  portfolioId: string | null;
   start: string;
   end: string;
   assetIds: string[];
   bounds: OptimizationWeightBoundRequest[];
+  riskFreeRateAnnual: number;
 }
 
 function sameStringArray(left: readonly string[], right: readonly string[]): boolean {
@@ -25,11 +29,9 @@ function sameBounds(
   if (left.length !== right.length) {
     return false;
   }
-
   const rightByAsset = new Map(
     right.map((bound) => [bound.asset_id, bound] as const),
   );
-
   return left.every((bound) => {
     const candidate = rightByAsset.get(bound.asset_id);
     return (
@@ -45,8 +47,11 @@ export function optimizationRunMatchesContext(
   context: OptimizationControlContext,
 ): boolean {
   return (
+    run.source_type === context.sourceType &&
+    run.portfolio_id === context.portfolioId &&
     run.provenance.period_start === context.start &&
     run.provenance.period_end_exclusive === context.end &&
+    run.provenance.risk_free_rate_annual === context.riskFreeRateAnnual &&
     sameStringArray(run.included_asset_ids, context.assetIds) &&
     sameBounds(run.parameters.bounds ?? [], context.bounds)
   );
@@ -74,7 +79,6 @@ export function optimizedWeightForAsset(
   if (run?.status !== "SUCCEEDED" || run.result?.portfolio == null) {
     return null;
   }
-
   return (
     run.result.portfolio.weights.find(
       (weight) => weight.asset_id === assetId,

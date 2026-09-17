@@ -88,3 +88,21 @@ export interface TransactionImportResult {
   imported_count: number;
   transactions: PortfolioTransaction[];
 }
+
+export type AssetResolveStatus = "RESOLVED" | "NOT_FOUND" | "FAILED";
+
+export interface AssetResolveRequest {
+  symbols: string[];
+}
+
+export interface AssetResolveOutcome {
+  symbol: string;
+  status: AssetResolveStatus;
+  asset: AssetCatalogItem | null;
+  warning: string | null;
+}
+
+export interface AssetResolveResult {
+  provider: string;
+  outcomes: AssetResolveOutcome[];
+}

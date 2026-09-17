@@ -14,9 +14,24 @@ from rest_framework.response import Response
 
 from apps.accounts.models import User
 from apps.assets.models import Asset
+from apps.market_data.api.dependencies import (
+    get_asset_catalog_writer,
+    get_asset_discovery_provider,
+    get_asset_resolver,
+)
+from apps.market_data.providers.configuration import (
+    ProviderConfigurationError,
+    load_market_data_provider_configuration,
+)
+from apps.market_data.services.asset_discovery import (
+    CanonicalAssetResolutionStatus,
+    resolve_canonical_assets_with_discovery,
+)
 from apps.portfolios.api.contracts import PortfolioApiErrorSerializer
 from apps.portfolios.api.management_serializers import (
     AssetCatalogItemSerializer,
+    AssetResolveRequestSerializer,
+    AssetResolveResultSerializer,
     PortfolioTransactionCreateRequestSerializer,
     PortfolioTransactionSerializer,
     TransactionImportErrorSerializer,
@@ -64,6 +79,86 @@ def asset_catalog_view(request: Request) -> Response:
             cast(Any, assets),
             many=True,
         ).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@extend_schema(
+    operation_id="asset_catalog_resolve",
+    description=(
+        "Resolve user-entered symbols through the canonical provider-neutral asset "
+        "boundary. Unresolved symbols may be discovered through the configured safe "
+        "provider adapter and persisted as supported canonical USD stock/ETF identities."
+    ),
+    request=AssetResolveRequestSerializer,
+    responses={
+        status.HTTP_200_OK: AssetResolveResultSerializer,
+        status.HTTP_400_BAD_REQUEST: PortfolioApiErrorSerializer,
+        status.HTTP_503_SERVICE_UNAVAILABLE: PortfolioApiErrorSerializer,
+    },
+    tags=["assets"],
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def asset_resolve_view(request: Request) -> Response:
+    """Resolve/discover canonical assets without retrieving historical bars."""
+    serializer = AssetResolveRequestSerializer(data=request.data)
+    if not serializer.is_valid():
+        return _validation_response(serializer.errors)
+
+    try:
+        configuration = load_market_data_provider_configuration()
+        provider_name = configuration.default_provider
+        batch = resolve_canonical_assets_with_discovery(
+            serializer.symbols_value,
+            provider_name=provider_name,
+            resolver=get_asset_resolver(),
+            discovery_provider=get_asset_discovery_provider(provider_name),
+            catalog_writer=get_asset_catalog_writer(),
+        )
+    except ProviderConfigurationError as exc:
+        return Response(
+            {
+                "code": "PROVIDER_CONFIGURATION_ERROR",
+                "detail": str(exc),
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    except ValueError as exc:
+        return Response(
+            {
+                "code": "VALIDATION_ERROR",
+                "detail": str(exc),
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    resolved_ids = tuple(
+        outcome.asset_id
+        for outcome in batch.outcomes
+        if outcome.status is CanonicalAssetResolutionStatus.RESOLVED
+        and outcome.asset_id is not None
+    )
+    assets = Asset.objects.in_bulk(resolved_ids)
+
+    payload = {
+        "provider": batch.provider,
+        "outcomes": [
+            {
+                "symbol": outcome.symbol,
+                "status": outcome.status.value,
+                "asset": (
+                    AssetCatalogItemSerializer(assets[outcome.asset_id]).data
+                    if outcome.asset_id is not None and outcome.asset_id in assets
+                    else None
+                ),
+                "warning": outcome.warning,
+            }
+            for outcome in batch.outcomes
+        ],
+    }
+    return Response(
+        AssetResolveResultSerializer(payload).data,
         status=status.HTTP_200_OK,
     )
 

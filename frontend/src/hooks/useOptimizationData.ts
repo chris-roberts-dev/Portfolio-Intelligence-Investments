@@ -14,14 +14,10 @@ import type {
   OptimizationRunCreateRequest,
 } from "../types/optimization";
 
-const OPTIMIZATION_RUNS_ROOT_QUERY_KEY = ["optimization-runs"] as const;
+export const OPTIMIZATION_RUNS_ROOT_QUERY_KEY = ["optimization-runs"] as const;
 
-export function optimizationRunsQueryKey(portfolioId: string | null) {
-  return [
-    ...OPTIMIZATION_RUNS_ROOT_QUERY_KEY,
-    "portfolio",
-    portfolioId ?? "disabled",
-  ] as const;
+export function optimizationRunsQueryKey() {
+  return [...OPTIMIZATION_RUNS_ROOT_QUERY_KEY, "owned"] as const;
 }
 
 export function optimizationRunDetailQueryKey(runId: string | null) {
@@ -32,18 +28,10 @@ export function optimizationRunDetailQueryKey(runId: string | null) {
   ] as const;
 }
 
-export function useOptimizationRuns(portfolioId: string | null) {
+export function useOptimizationRuns() {
   return useQuery({
-    queryKey: optimizationRunsQueryKey(portfolioId),
-    queryFn: async ({ signal }) => {
-      if (portfolioId === null) {
-        throw new Error("Portfolio optimization-run list is not available.");
-      }
-
-      const runs = await fetchOptimizationRuns(signal);
-      return runs.filter((run) => run.portfolio_id === portfolioId);
-    },
-    enabled: portfolioId !== null,
+    queryKey: optimizationRunsQueryKey(),
+    queryFn: ({ signal }) => fetchOptimizationRuns(signal),
     retry: 1,
     staleTime: 30_000,
   });
@@ -56,7 +44,6 @@ export function useOptimizationRun(runId: string | null) {
       if (runId === null) {
         throw new Error("Optimization run is not available.");
       }
-
       return fetchOptimizationRun(runId, signal);
     },
     enabled: runId !== null,
@@ -71,7 +58,7 @@ export function useOptimizationRun(runId: string | null) {
   });
 }
 
-export function useCreateOptimizationRun(portfolioId: string | null) {
+export function useCreateOptimizationRun() {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -82,12 +69,9 @@ export function useCreateOptimizationRun(portfolioId: string | null) {
         optimizationRunDetailQueryKey(run.id),
         run,
       );
-
-      if (portfolioId !== null) {
-        await queryClient.invalidateQueries({
-          queryKey: optimizationRunsQueryKey(portfolioId),
-        });
-      }
+      await queryClient.invalidateQueries({
+        queryKey: OPTIMIZATION_RUNS_ROOT_QUERY_KEY,
+      });
     },
   });
 }

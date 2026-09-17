@@ -107,6 +107,48 @@ paths:
                 items:
                   $ref: '#/components/schemas/AssetCatalogItem'
           description: Active canonical asset identities.
+  /api/v1/assets/resolve/:
+    post:
+      operationId: asset_catalog_resolve
+      description: Resolve user-entered symbols through the canonical provider-neutral
+        asset boundary. Unresolved symbols may be discovered through the configured
+        safe provider adapter and persisted as supported canonical USD stock/ETF identities.
+      tags:
+      - assets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetResolveRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AssetResolveRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AssetResolveRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetResolveResult'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: ''
   /api/v1/auth/login/:
     post:
       operationId: auth_login
@@ -286,7 +328,8 @@ paths:
     post:
       operationId: optimization_run_create
       description: Create and synchronously execute one persisted historical optimization
-        run. Failed domain/solver executions remain auditable as FAILED run resources.
+        run from either an owned portfolio or an explicit ad hoc canonical asset universe.
+        Failed domain/solver executions remain auditable as FAILED run resources.
       tags:
       - optimization
       requestBody:
@@ -1674,6 +1717,69 @@ components:
       - id
       - name
       - symbol
+    AssetResolveOutcome:
+      type: object
+      description: One ordered canonical asset-resolution outcome.
+      properties:
+        symbol:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/AssetResolveOutcomeStatusEnum'
+          readOnly: true
+        asset:
+          allOf:
+          - $ref: '#/components/schemas/AssetCatalogItem'
+          readOnly: true
+          nullable: true
+        warning:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - asset
+      - status
+      - symbol
+      - warning
+    AssetResolveOutcomeStatusEnum:
+      enum:
+      - RESOLVED
+      - NOT_FOUND
+      - FAILED
+      type: string
+      description: |-
+        * `RESOLVED` - RESOLVED
+        * `NOT_FOUND` - NOT_FOUND
+        * `FAILED` - FAILED
+    AssetResolveRequest:
+      type: object
+      description: Resolve/discover user-entered symbols into canonical application
+        assets.
+      properties:
+        symbols:
+          type: array
+          items:
+            type: string
+            maxLength: 32
+          maxItems: 50
+      required:
+      - symbols
+    AssetResolveResult:
+      type: object
+      description: Provider-neutral asset discovery response for Allocation Lab input.
+      properties:
+        provider:
+          type: string
+          readOnly: true
+        outcomes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetResolveOutcome'
+          readOnly: true
+      required:
+      - outcomes
+      - provider
     AuthApiError:
       type: object
       description: Stable authentication/session error response.
@@ -3685,6 +3791,21 @@ components:
       required:
       - code
       - detail
+    OptimizationBaselineWeight:
+      type: object
+      description: One optional reference-allocation weight for comparison only.
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+        weight:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+      required:
+      - asset_id
+      - weight
     OptimizationResult:
       type: object
       properties:
@@ -3709,10 +3830,19 @@ components:
           type: string
           format: uuid
           readOnly: true
+        source_type:
+          allOf:
+          - $ref: '#/components/schemas/SourceTypeEnum'
+          readOnly: true
         portfolio_id:
           type: string
           format: uuid
           readOnly: true
+          nullable: true
+        portfolio_name:
+          type: string
+          readOnly: true
+          nullable: true
         status:
           allOf:
           - $ref: '#/components/schemas/OptimizationRunStatusEnum'
@@ -3726,6 +3856,11 @@ components:
           items:
             type: string
             format: uuid
+          readOnly: true
+        baseline_weights:
+          type: array
+          items:
+            $ref: '#/components/schemas/OptimizationBaselineWeight'
           readOnly: true
         parameters:
           readOnly: true
@@ -3764,6 +3899,7 @@ components:
           - $ref: '#/components/schemas/OptimizationRunProvenance'
           readOnly: true
       required:
+      - baseline_weights
       - completed_at
       - created_at
       - failure_code
@@ -3773,18 +3909,26 @@ components:
       - method
       - parameters
       - portfolio_id
+      - portfolio_name
       - provenance
       - result
+      - source_type
       - started_at
       - status
       - warnings
     OptimizationRunCreateRequest:
       type: object
-      description: Request contract for one synchronous persisted optimization run.
+      description: Request contract for one portfolio-derived or ad hoc persisted
+        run.
       properties:
+        source_type:
+          allOf:
+          - $ref: '#/components/schemas/SourceTypeEnum'
+          default: PORTFOLIO
         portfolio_id:
           type: string
           format: uuid
+          nullable: true
         method:
           $ref: '#/components/schemas/OptimizationRunMethodEnum'
         start:
@@ -3803,6 +3947,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OptimizationWeightBound'
+        baseline_weights:
+          type: array
+          items:
+            $ref: '#/components/schemas/OptimizationBaselineWeight'
         risk_free_rate_annual:
           type: number
           format: double
@@ -3815,7 +3963,6 @@ components:
       required:
       - end
       - method
-      - portfolio_id
       - start
     OptimizationRunMethodEnum:
       enum:
@@ -4848,6 +4995,14 @@ components:
         * `CURRENT_VALUATION` - CURRENT_VALUATION
         * `DAILY_PERFORMANCE` - DAILY_PERFORMANCE
         * `ANALYTICS` - ANALYTICS
+    SourceTypeEnum:
+      enum:
+      - PORTFOLIO
+      - AD_HOC
+      type: string
+      description: |-
+        * `PORTFOLIO` - Portfolio
+        * `AD_HOC` - Ad hoc
     TargetAllocation:
       type: object
       properties:

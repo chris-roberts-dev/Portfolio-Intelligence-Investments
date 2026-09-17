@@ -10,19 +10,29 @@ export type OptimizationRunMethod =
   | "MAXIMUM_SHARPE"
   | "EFFICIENT_FRONTIER";
 
+export type OptimizationRunSource = "PORTFOLIO" | "AD_HOC";
+
 export interface OptimizationWeightBoundRequest {
   asset_id: string;
   minimum: number;
   maximum: number;
 }
 
+export interface OptimizationBaselineWeightRequest {
+  asset_id: string;
+  weight: number;
+}
+
 export interface OptimizationRunCreateRequest {
-  portfolio_id: string;
+  source_type: OptimizationRunSource;
+  portfolio_id?: string | null;
   method: OptimizationRunMethod;
   start: string;
   end: string;
   asset_ids?: string[];
   bounds?: OptimizationWeightBoundRequest[];
+  baseline_weights?: OptimizationBaselineWeightRequest[];
+  risk_free_rate_annual?: number;
   frontier_points?: number;
 }
 
@@ -51,8 +61,11 @@ export interface OptimizationRunWarning {
 }
 
 export interface OptimizationRunParameters {
+  source_type: OptimizationRunSource;
   requested_asset_ids: string[] | null;
   bounds: OptimizationWeightBoundRequest[];
+  baseline_weights: OptimizationBaselineWeightRequest[];
+  risk_free_rate_annual: number;
   frontier_points: number;
   observations?: number;
   covariance_rank?: number;
@@ -74,10 +87,13 @@ export interface OptimizationRunProvenance {
 
 export interface OptimizationRun {
   id: string;
-  portfolio_id: string;
+  source_type: OptimizationRunSource;
+  portfolio_id: string | null;
+  portfolio_name: string | null;
   status: OptimizationRunStatus;
   method: OptimizationRunMethod;
   included_asset_ids: string[];
+  baseline_weights: OptimizationBaselineWeightRequest[];
   parameters: OptimizationRunParameters;
   result: OptimizationResult | null;
   warnings: OptimizationRunWarning[];

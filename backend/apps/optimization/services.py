@@ -25,12 +25,13 @@ from apps.market_data.services.asset_resolution import AssetResolver
 from apps.optimization.models import (
     OptimizationRun,
     OptimizationRunMethod,
+    OptimizationRunSource,
     OptimizationRunStatus,
 )
 from apps.portfolios.models import Portfolio
 from apps.portfolios.services.current_valuation import MarketBarQueryExecutor
 from apps.portfolios.services.ledger import replay_portfolio_ledger
-from portfolio_engine.config import TRADING_DAYS_PER_YEAR
+from portfolio_engine.config import TRADING_DAYS_PER_YEAR, WEIGHT_SUM_TOLERANCE
 from portfolio_engine.contracts.market_data import PriceFrame
 from portfolio_engine.optimization import (
     OptimizationError,
@@ -76,15 +77,25 @@ class AssetWeightBounds:
 
 
 @dataclass(frozen=True, slots=True)
+class BaselineWeight:
+    """One optional user-supplied reference allocation weight."""
+
+    asset_id: UUID
+    weight: float
+
+
+@dataclass(frozen=True, slots=True)
 class CreateOptimizationRunCommand:
     """Validated application command for one synchronous persisted run."""
 
-    portfolio_id: UUID
+    portfolio_id: UUID | None
     method: OptimizationRunMethod
     period_start: date
     period_end: date
+    source_type: OptimizationRunSource = OptimizationRunSource.PORTFOLIO
     requested_asset_ids: tuple[UUID, ...] | None = None
     bounds: tuple[AssetWeightBounds, ...] = ()
+    baseline_weights: tuple[BaselineWeight, ...] = ()
     risk_free_rate_annual: float = 0.0
     frontier_points: int = 25
 
@@ -102,24 +113,44 @@ def create_optimization_run(
     provider: MarketDataProvider,
     executor: MarketBarQueryExecutor,
 ) -> OptimizationRun:
-    """Create, execute, and persist one owner-scoped synchronous optimization run."""
-    portfolio = (
-        Portfolio.objects.owned_by(user)
-        .select_related("benchmark_asset")
-        .get(id=command.portfolio_id)
-    )
+    """Create, execute, and persist one portfolio or ad hoc optimization run."""
     _validate_command(command)
-    as_of = datetime.combine(command.period_end, time.min, tzinfo=UTC) - timedelta(microseconds=1)
-    ledger = replay_portfolio_ledger(portfolio, as_of=as_of)
-    held_asset_ids = tuple(
-        position.asset_id for position in ledger.positions if position.quantity > 0
+
+    portfolio: Portfolio | None = None
+    held_asset_ids: tuple[UUID, ...] = ()
+
+    if command.source_type is OptimizationRunSource.PORTFOLIO:
+        assert command.portfolio_id is not None
+        portfolio = (
+            Portfolio.objects.owned_by(user)
+            .select_related("benchmark_asset")
+            .get(id=command.portfolio_id)
+        )
+        as_of = datetime.combine(command.period_end, time.min, tzinfo=UTC) - timedelta(
+            microseconds=1
+        )
+        ledger = replay_portfolio_ledger(portfolio, as_of=as_of)
+        held_asset_ids = tuple(
+            position.asset_id for position in ledger.positions if position.quantity > 0
+        )
+        selected_asset_ids = _selected_portfolio_asset_ids(
+            held_asset_ids=held_asset_ids,
+            requested_asset_ids=command.requested_asset_ids,
+        )
+    else:
+        assert command.requested_asset_ids is not None
+        selected_asset_ids = command.requested_asset_ids
+
+    _validate_baseline_weights(
+        selected_asset_ids=selected_asset_ids,
+        baseline_weights=command.baseline_weights,
     )
-    candidate_asset_ids = command.requested_asset_ids or held_asset_ids
 
     run = OptimizationRun.objects.create(
         user=user,
+        source_type=command.source_type,
         portfolio=portfolio,
-        benchmark_asset=portfolio.benchmark_asset,
+        benchmark_asset=(portfolio.benchmark_asset if portfolio is not None else None),
         status=OptimizationRunStatus.PENDING,
         method=command.method,
         period_start=command.period_start,
@@ -128,7 +159,11 @@ def create_optimization_run(
         price_field="adjusted_close",
         annualization_factor=TRADING_DAYS_PER_YEAR,
         risk_free_rate_annual=Decimal(str(command.risk_free_rate_annual)),
-        included_asset_ids=[str(asset_id) for asset_id in candidate_asset_ids],
+        included_asset_ids=[str(asset_id) for asset_id in selected_asset_ids],
+        baseline_weights=[
+            {"asset_id": str(item.asset_id), "weight": item.weight}
+            for item in command.baseline_weights
+        ],
         parameters=_parameters_json(command),
         engine_version=PORTFOLIO_ENGINE_VERSION,
         method_version=OPTIMIZATION_METHOD_VERSION,
@@ -136,12 +171,6 @@ def create_optimization_run(
     _transition_running(run)
 
     try:
-        selected_asset_ids = _selected_asset_ids(
-            held_asset_ids=held_asset_ids,
-            requested_asset_ids=command.requested_asset_ids,
-        )
-        run.included_asset_ids = [str(asset_id) for asset_id in selected_asset_ids]
-        run.save(update_fields=("included_asset_ids", "updated_at"))
         assets = _load_eligible_assets(selected_asset_ids)
         frames, retrieved_at = _load_price_frames(
             assets=assets,
@@ -209,30 +238,89 @@ class OptimizationRunDomainFailure(ValueError):
 def _validate_command(command: CreateOptimizationRunCommand) -> None:
     if command.period_end <= command.period_start:
         raise OptimizationApplicationError("period_end must be later than period_start.")
+
     if not math.isfinite(command.risk_free_rate_annual):
         raise OptimizationApplicationError("risk_free_rate_annual must be finite.")
+
     if command.frontier_points < 2 or command.frontier_points > 100:
         raise OptimizationApplicationError("frontier_points must be between 2 and 100.")
+
+    if command.source_type is OptimizationRunSource.PORTFOLIO:
+        if command.portfolio_id is None:
+            raise OptimizationApplicationError("Portfolio-scoped runs require portfolio_id.")
+    elif command.source_type is OptimizationRunSource.AD_HOC:
+        if command.portfolio_id is not None:
+            raise OptimizationApplicationError("Ad hoc runs cannot include portfolio_id.")
+        if not command.requested_asset_ids:
+            raise OptimizationApplicationError(
+                "Ad hoc runs require an explicit non-empty asset_ids universe."
+            )
+
     if command.requested_asset_ids is not None and not command.requested_asset_ids:
-        raise OptimizationApplicationError("requested_asset_ids must not be empty when supplied.")
+        raise OptimizationApplicationError("asset_ids must not be empty when supplied.")
+
     if command.requested_asset_ids is not None and (
         len(set(command.requested_asset_ids)) != len(command.requested_asset_ids)
     ):
-        raise OptimizationApplicationError("requested_asset_ids must be unique.")
+        raise OptimizationApplicationError("asset_ids must be unique.")
+
     bound_asset_ids = tuple(bound.asset_id for bound in command.bounds)
     if len(set(bound_asset_ids)) != len(bound_asset_ids):
         raise OptimizationApplicationError("bounds must contain each asset at most once.")
 
+    for bound in command.bounds:
+        if (
+            not math.isfinite(bound.minimum)
+            or not math.isfinite(bound.maximum)
+            or bound.minimum < 0.0
+            or bound.maximum > 1.0
+            or bound.minimum > bound.maximum
+        ):
+            raise OptimizationApplicationError(
+                "Each bound must satisfy finite 0 <= minimum <= maximum <= 1."
+            )
 
-def _selected_asset_ids(
+
+def _validate_baseline_weights(
+    *,
+    selected_asset_ids: Sequence[UUID],
+    baseline_weights: Sequence[BaselineWeight],
+) -> None:
+    if not baseline_weights:
+        return
+
+    baseline_asset_ids = tuple(item.asset_id for item in baseline_weights)
+    if len(set(baseline_asset_ids)) != len(baseline_asset_ids):
+        raise OptimizationApplicationError("baseline_weights must contain each asset at most once.")
+
+    selected = tuple(selected_asset_ids)
+    if set(baseline_asset_ids) != set(selected):
+        raise OptimizationApplicationError(
+            "A supplied baseline must include exactly every asset in the optimization universe."
+        )
+
+    total = 0.0
+    for item in baseline_weights:
+        if not math.isfinite(item.weight) or item.weight < 0.0 or item.weight > 1.0:
+            raise OptimizationApplicationError(
+                "Baseline weights must be finite and between zero and one."
+            )
+        total += item.weight
+
+    if abs(total - 1.0) > WEIGHT_SUM_TOLERANCE:
+        raise OptimizationApplicationError(
+            "Complete baseline weights must sum to one within tolerance."
+        )
+
+
+def _selected_portfolio_asset_ids(
     *,
     held_asset_ids: tuple[UUID, ...],
     requested_asset_ids: tuple[UUID, ...] | None,
 ) -> tuple[UUID, ...]:
     if not held_asset_ids:
-        raise OptimizationRunDomainFailure(
-            OptimizationApplicationFailureCode.NO_ELIGIBLE_ASSETS,
-            "Portfolio has no positive security positions at the requested period end.",
+        raise OptimizationApplicationError(
+            "Portfolio has no positive security positions at the requested period end."
         )
     if requested_asset_ids is None:
         return held_asset_ids
@@ -240,9 +328,8 @@ def _selected_asset_ids(
     held = set(held_asset_ids)
     missing = tuple(asset_id for asset_id in requested_asset_ids if asset_id not in held)
     if missing:
-        raise OptimizationRunDomainFailure(
-            OptimizationApplicationFailureCode.ASSET_NOT_HELD,
-            f"Requested assets are not positive portfolio holdings: {missing!r}.",
+        raise OptimizationApplicationError(
+            f"Requested assets are not positive portfolio holdings: {missing!r}."
         )
     return requested_asset_ids
 
@@ -255,7 +342,7 @@ def _load_eligible_assets(asset_ids: Sequence[UUID]) -> dict[UUID, Asset]:
             asset is None
             or not asset.is_active
             or asset.currency != "USD"
-            or (asset.asset_type not in (AssetType.STOCK, AssetType.ETF))
+            or asset.asset_type not in (AssetType.STOCK, AssetType.ETF)
         ):
             raise OptimizationRunDomainFailure(
                 OptimizationApplicationFailureCode.ASSET_UNSUPPORTED,
@@ -281,6 +368,7 @@ def _load_price_frames(
             OptimizationApplicationFailureCode.ASSET_UNSUPPORTED,
             "Optimization assets must have unique canonical symbols.",
         )
+
     query = normalize_market_bar_query(
         symbols,
         start=period_start,
@@ -295,10 +383,10 @@ def _load_price_frames(
         asset = assets[asset_id]
         symbol_result = by_symbol.get(asset.symbol)
         if symbol_result is None or symbol_result.status != MarketBarStatus.SUCCEEDED:
-            status = symbol_result.status if symbol_result is not None else "MISSING"
+            symbol_status = symbol_result.status if symbol_result is not None else "MISSING"
             raise OptimizationRunDomainFailure(
                 OptimizationApplicationFailureCode.MARKET_DATA_UNAVAILABLE,
-                f"Optimization market data is unavailable for {asset.symbol}: {status}.",
+                f"Optimization market data is unavailable for {asset.symbol}: {symbol_status}.",
             )
         if not symbol_result.bars:
             raise OptimizationRunDomainFailure(
@@ -318,7 +406,7 @@ def _engine_bounds(
     unknown = set(by_asset).difference(asset_ids)
     if unknown:
         raise OptimizationRunDomainFailure(
-            OptimizationApplicationFailureCode.ASSET_NOT_HELD,
+            OptimizationApplicationFailureCode.ASSET_UNSUPPORTED,
             f"Bounds reference assets outside the optimization universe: {tuple(unknown)!r}.",
         )
     return tuple(
@@ -362,7 +450,11 @@ def _portfolio_json(portfolio: OptimizedPortfolio) -> dict[str, object]:
         "method": portfolio.method.value,
         "weights": [
             {"asset_id": asset_key, "weight": weight}
-            for asset_key, weight in zip(portfolio.asset_keys, portfolio.weights, strict=True)
+            for asset_key, weight in zip(
+                portfolio.asset_keys,
+                portfolio.weights,
+                strict=True,
+            )
         ],
         "expected_return": portfolio.expected_return,
         "expected_volatility": portfolio.expected_volatility,
@@ -373,6 +465,7 @@ def _portfolio_json(portfolio: OptimizedPortfolio) -> dict[str, object]:
 
 def _parameters_json(command: CreateOptimizationRunCommand) -> dict[str, object]:
     return {
+        "source_type": command.source_type.value,
         "requested_asset_ids": (
             [str(asset_id) for asset_id in command.requested_asset_ids]
             if command.requested_asset_ids is not None
@@ -386,6 +479,14 @@ def _parameters_json(command: CreateOptimizationRunCommand) -> dict[str, object]
             }
             for bound in command.bounds
         ],
+        "baseline_weights": [
+            {
+                "asset_id": str(item.asset_id),
+                "weight": item.weight,
+            }
+            for item in command.baseline_weights
+        ],
+        "risk_free_rate_annual": command.risk_free_rate_annual,
         "frontier_points": command.frontier_points,
     }
 

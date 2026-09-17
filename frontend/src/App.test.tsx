@@ -167,7 +167,7 @@ describe("App authentication routing", () => {
     );
 
     renderApp(
-      "/portfolios/00000000-0000-0000-0000-000000000002/allocation-lab?range=6M",
+      "/allocation-lab",
     );
 
     expect(
@@ -273,6 +273,13 @@ describe("App authentication routing", () => {
           );
         }
 
+        if (url.endsWith("/api/v1/assets/")) {
+          return new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
         if (url.endsWith("/api/v1/optimization-runs/")) {
           return new Response(JSON.stringify([]), {
             status: 200,
@@ -284,12 +291,12 @@ describe("App authentication routing", () => {
       }),
     );
 
-    renderApp(`/portfolios/${portfolioId}/allocation-lab?range=6M`);
+    renderApp("/allocation-lab");
 
     expect(
       await screen.findByRole("heading", { name: "Allocation Lab" }),
     ).toBeInTheDocument();
-    expect(await screen.findByText("No eligible holdings")).toBeInTheDocument();
+    expect(await screen.findByText("No assets selected")).toBeInTheDocument();
   });
 
   it("routes an authenticated user to portfolio management with preserved context", async () => {

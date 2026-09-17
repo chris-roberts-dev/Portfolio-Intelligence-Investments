@@ -25,6 +25,7 @@ describe("AllocationComparisonChart", () => {
   it("keeps unavailable optimization values explicit instead of deriving them", () => {
     render(
       <AllocationComparisonChart
+        baselineLabel="Custom baseline"
         rows={[
           {
             assetId: "asset-a",
@@ -40,7 +41,7 @@ describe("AllocationComparisonChart", () => {
 
     expect(
       screen.getByRole("img", {
-        name: "Current and optimized allocation comparison chart",
+        name: "Custom baseline and optimized allocation comparison chart",
       }),
     ).toBeInTheDocument();
 

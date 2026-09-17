@@ -41,6 +41,21 @@ function MarketDataIcon() {
   );
 }
 
+function AllocationLabIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path d="M4 18V8m6 10V4m6 14v-6m4 6H2" />
+    </svg>
+  );
+}
+
 function navLinkClass(active: boolean): string {
   return `flex h-11 w-11 items-center justify-center rounded-xl outline-none transition focus-visible:ring-2 focus-visible:ring-blue-400 ${
     active
@@ -59,7 +74,10 @@ export function DashboardShell({
   const logoutMutation = useLogout();
   const user = sessionQuery.data?.user;
   const marketDataActive = location.pathname.startsWith("/market-data");
-  const overviewActive = !marketDataActive;
+  const allocationLabActive =
+    location.pathname === "/allocation-lab" ||
+    location.pathname.includes("/allocation-lab");
+  const overviewActive = !marketDataActive && !allocationLabActive;
 
   async function handleLogout() {
     try {
@@ -104,6 +122,16 @@ export function DashboardShell({
           >
             <MarketDataIcon />
           </Link>
+
+          <Link
+            to="/allocation-lab"
+            className={navLinkClass(allocationLabActive)}
+            aria-label="Allocation Lab"
+            title="Allocation Lab"
+            aria-current={allocationLabActive ? "page" : undefined}
+          >
+            <AllocationLabIcon />
+          </Link>
         </nav>
       </aside>
 
@@ -136,6 +164,18 @@ export function DashboardShell({
                   aria-current={marketDataActive ? "page" : undefined}
                 >
                   Market data
+                </Link>
+
+                <Link
+                  to="/allocation-lab"
+                  className={
+                    allocationLabActive
+                      ? "font-semibold text-slate-950"
+                      : "font-semibold text-slate-600 hover:text-slate-950"
+                  }
+                  aria-current={allocationLabActive ? "page" : undefined}
+                >
+                  Allocation Lab
                 </Link>
               </nav>
 

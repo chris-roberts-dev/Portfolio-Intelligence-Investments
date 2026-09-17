@@ -1,4 +1,3 @@
-import { apiGet, apiPatch, apiPost } from "./client";
 import type { PortfolioAnalyticsResult } from "../types/analytics";
 import type {
   DashboardSnapshotResult,
@@ -6,6 +5,8 @@ import type {
 } from "../types/dashboard";
 import type {
   AssetCatalogItem,
+  AssetResolveRequest,
+  AssetResolveResult,
   PortfolioBenchmarkRequest,
   PortfolioCreateRequest,
   PortfolioRenameRequest,
@@ -15,6 +16,7 @@ import type {
   TransactionImportRequest,
   TransactionImportResult,
 } from "../types/portfolioManagement";
+import { apiGet, apiPatch, apiPost } from "./client";
 
 export interface DashboardSnapshotRequest {
   portfolioId: string;
@@ -58,6 +60,16 @@ export function fetchAssetCatalog(
   signal?: AbortSignal,
 ): Promise<AssetCatalogItem[]> {
   return apiGet<AssetCatalogItem[]>("/api/v1/assets/", { signal });
+}
+
+
+export function resolveAssets(
+  request: AssetResolveRequest,
+): Promise<AssetResolveResult> {
+  return apiPost<AssetResolveResult, AssetResolveRequest>(
+    "/api/v1/assets/resolve/",
+    request,
+  );
 }
 
 export function updatePortfolioBenchmark(

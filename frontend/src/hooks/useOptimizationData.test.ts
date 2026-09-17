@@ -4,11 +4,10 @@ import {
 } from "./useOptimizationData";
 
 describe("optimization query keys", () => {
-  it("scopes the run list by portfolio identity", () => {
-    expect(optimizationRunsQueryKey("portfolio-1")).toEqual([
+  it("uses one owner-scoped run-history root for standalone Allocation Lab", () => {
+    expect(optimizationRunsQueryKey()).toEqual([
       "optimization-runs",
-      "portfolio",
-      "portfolio-1",
+      "owned",
     ]);
   });
 

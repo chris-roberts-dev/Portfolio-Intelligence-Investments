@@ -45,7 +45,8 @@ from apps.portfolios.models import Portfolio
     post=extend_schema(
         operation_id="optimization_run_create",
         description=(
-            "Create and synchronously execute one persisted historical optimization run. "
+            "Create and synchronously execute one persisted historical optimization run from "
+            "either an owned portfolio or an explicit ad hoc canonical asset universe. "
             "Failed domain/solver executions remain auditable as FAILED run resources."
         ),
         request=OptimizationRunCreateRequestSerializer,

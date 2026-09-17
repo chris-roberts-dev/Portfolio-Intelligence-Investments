@@ -13,6 +13,7 @@ from apps.portfolios.api.holdings_dashboard_views import (
 )
 from apps.portfolios.api.management_views import (
     asset_catalog_view,
+    asset_resolve_view,
     portfolio_transaction_create_view,
     portfolio_transaction_import_confirm_view,
     portfolio_transaction_import_preview_view,
@@ -42,6 +43,11 @@ urlpatterns = [
         "assets/",
         asset_catalog_view,
         name="api-v1-asset-catalog",
+    ),
+    path(
+        "assets/resolve/",
+        asset_resolve_view,
+        name="api-v1-asset-resolve",
     ),
     path(
         "portfolios/",

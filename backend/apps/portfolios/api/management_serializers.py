@@ -69,6 +69,39 @@ class AssetCatalogItemSerializer(serializers.Serializer[Asset]):
     currency = serializers.CharField(read_only=True)
 
 
+class AssetResolveRequestSerializer(serializers.Serializer[object]):
+    """Resolve/discover user-entered symbols into canonical application assets."""
+
+    symbols = serializers.ListField(
+        child=serializers.CharField(max_length=32, trim_whitespace=True),
+        allow_empty=False,
+        max_length=50,
+    )
+
+    @property
+    def symbols_value(self) -> tuple[str, ...]:
+        return tuple(cast(list[str], self.validated_data["symbols"]))
+
+
+class AssetResolveOutcomeSerializer(serializers.Serializer[object]):
+    """One ordered canonical asset-resolution outcome."""
+
+    symbol = serializers.CharField(read_only=True)
+    status = serializers.ChoiceField(
+        choices=("RESOLVED", "NOT_FOUND", "FAILED"),
+        read_only=True,
+    )
+    asset = AssetCatalogItemSerializer(read_only=True, allow_null=True)
+    warning = serializers.CharField(read_only=True, allow_null=True)
+
+
+class AssetResolveResultSerializer(serializers.Serializer[object]):
+    """Provider-neutral asset discovery response for Allocation Lab input."""
+
+    provider = serializers.CharField(read_only=True)
+    outcomes = AssetResolveOutcomeSerializer(many=True, read_only=True)
+
+
 class PortfolioTransactionSerializer(serializers.Serializer[Transaction]):
     """Persisted canonical transaction representation."""
 

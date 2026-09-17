@@ -24,10 +24,6 @@ import {
   type DashboardRange,
 } from "../features/dashboard/dateRange";
 import {
-  formatDateTime,
-  humanizeCode,
-} from "../features/dashboard/formatting";
-import {
   latestSuccessfulOptimizationRun,
   optimizedWeightForAsset,
   type OptimizationControlContext,
@@ -38,69 +34,77 @@ import {
   useOptimizationRuns,
 } from "../hooks/useOptimizationData";
 import {
+  useAssetCatalog,
   useDashboardSnapshot,
   usePortfolios,
+  useResolveAssets,
 } from "../hooks/usePortfolioData";
 import { DashboardShell } from "../layouts/DashboardShell";
-import type { DashboardHolding } from "../types/dashboard";
 import type {
+  OptimizationBaselineWeightRequest,
   OptimizationRun,
   OptimizationRunCreateRequest,
   OptimizationRunMethod,
   OptimizationRunStatus,
   OptimizationWeightBoundRequest,
 } from "../types/optimization";
+import type { AssetCatalogItem } from "../types/portfolioManagement";
+
+type SourceMode = "AD_HOC" | "PORTFOLIO";
 
 interface AssetControlState {
-  selected: boolean;
+  asset: AssetCatalogItem;
   minimum: string;
   maximum: string;
+  baseline: string;
 }
 
 const METHOD_OPTIONS: readonly {
   value: OptimizationRunMethod;
   label: string;
-  description: string;
 }[] = [
-  {
-    value: "EQUAL_WEIGHT",
-    label: "Equal weight",
-    description:
-      "Server-calculated 1/N allocation subject to the submitted bounds.",
-  },
-  {
-    value: "MINIMUM_VARIANCE",
-    label: "Minimum variance",
-    description:
-      "Server-calculated long-only allocation minimizing historical annual variance.",
-  },
-  {
-    value: "MAXIMUM_SHARPE",
-    label: "Maximum Sharpe",
-    description:
-      "Server-calculated long-only allocation maximizing historical annual Sharpe.",
-  },
-  {
-    value: "EFFICIENT_FRONTIER",
-    label: "Efficient frontier",
-    description:
-      "Server-returned constrained minimum-variance portfolios across feasible target returns.",
-  },
+  { value: "EQUAL_WEIGHT", label: "Equal weight" },
+  { value: "MINIMUM_VARIANCE", label: "Minimum variance" },
+  { value: "MAXIMUM_SHARPE", label: "Maximum Sharpe" },
+  { value: "EFFICIENT_FRONTIER", label: "Efficient frontier" },
 ] as const;
 
 function isDashboardRange(value: string | null): value is DashboardRange {
   return value !== null && DASHBOARD_RANGES.includes(value as DashboardRange);
 }
 
-function methodLabel(method: OptimizationRunMethod): string {
-  return METHOD_OPTIONS.find((option) => option.value === method)?.label ?? method;
+function formatLocalDate(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function defaultDates(): { start: string; end: string } {
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const start = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+  return { start: formatLocalDate(start), end: formatLocalDate(end) };
+}
+
+function parseSymbols(value: string): string[] {
+  const seen = new Set<string>();
+  return value
+    .split(/[\s,]+/)
+    .map((symbol) => symbol.trim().toUpperCase())
+    .filter((symbol) => {
+      if (!symbol || seen.has(symbol)) {
+        return false;
+      }
+      seen.add(symbol);
+      return true;
+    });
 }
 
 function formatPercent(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return "Not available";
   }
-
   return new Intl.NumberFormat(undefined, {
     style: "percent",
     minimumFractionDigits: 2,
@@ -112,664 +116,449 @@ function formatRatio(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return "Not available";
   }
-
   return new Intl.NumberFormat(undefined, {
     minimumFractionDigits: 3,
     maximumFractionDigits: 3,
   }).format(value);
 }
 
-function formatCount(value: number | undefined): string {
-  if (value === undefined || !Number.isFinite(value)) {
-    return "Not available";
-  }
-
-  return new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function statusPresentation(status: OptimizationRunStatus): {
-  label: string;
-  className: string;
-} {
+function statusLabel(status: OptimizationRunStatus): string {
   switch (status) {
     case "PENDING":
-      return {
-        label: "Pending",
-        className: "border-slate-200 bg-slate-50 text-slate-700",
-      };
+      return "Pending";
     case "RUNNING":
-      return {
-        label: "Running",
-        className: "border-blue-200 bg-blue-50 text-blue-800",
-      };
+      return "Running";
     case "SUCCEEDED":
-      return {
-        label: "Succeeded",
-        className: "border-emerald-200 bg-emerald-50 text-emerald-800",
-      };
+      return "Succeeded";
     case "FAILED":
-      return {
-        label: "Failed",
-        className: "border-rose-200 bg-rose-50 text-rose-900",
-      };
+      return "Failed";
   }
 }
 
-function flattenErrorValue(value: unknown): string[] {
-  if (typeof value === "string") {
-    return [value];
-  }
-
-  if (Array.isArray(value)) {
-    return value.flatMap(flattenErrorValue);
-  }
-
-  if (value !== null && typeof value === "object") {
-    return Object.values(value).flatMap(flattenErrorValue);
-  }
-
-  return [];
-}
-
-function apiValidationErrors(error: ApiError | null): Record<string, string[]> {
-  if (
-    error === null ||
-    error.status !== 400 ||
-    error.payload === null ||
-    typeof error.payload !== "object" ||
-    !("errors" in error.payload)
-  ) {
-    return {};
-  }
-
-  const raw = error.payload.errors;
-  if (raw === null || typeof raw !== "object") {
-    return {};
-  }
-
-  return Object.fromEntries(
-    Object.entries(raw).map(([field, value]) => [field, flattenErrorValue(value)]),
-  );
-}
-
-function transportErrorTitle(error: Error): string {
+function errorTitle(error: Error): string {
   if (!(error instanceof ApiError)) {
-    return "Allocation Lab could not load";
+    return "Optimization request failed";
   }
-
-  switch (error.status) {
-    case 403:
-      return "Portfolio access denied";
-    case 404:
-      return "Portfolio or optimization run not found";
-    case 503:
-      return "Optimization data provider unavailable";
-    default:
-      return "Allocation Lab could not load";
+  if (error.status === 400) {
+    return "Optimization configuration is invalid";
   }
-}
-
-function isEligibleHolding(holding: DashboardHolding): boolean {
-  return (
-    (holding.asset_type === "STOCK" || holding.asset_type === "ETF") &&
-    holding.currency === "USD"
-  );
-}
-
-function currentMethodDescription(method: OptimizationRunMethod): string {
-  return METHOD_OPTIONS.find((option) => option.value === method)?.description ?? "";
-}
-
-function OptimizationMetric({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-        {label}
-      </dt>
-      <dd className="mt-2 text-xl font-semibold tabular-nums text-slate-950">
-        {value}
-      </dd>
-    </div>
-  );
-}
-
-function RunStatusPanel({ run }: { run: OptimizationRun }) {
-  const presentation = statusPresentation(run.status);
-
-  if (run.status === "PENDING" || run.status === "RUNNING") {
-    return (
-      <section
-        className="rounded-3xl border border-blue-200 bg-blue-50 p-5 sm:p-6"
-        aria-live="polite"
-        aria-labelledby="optimization-progress-heading"
-      >
-        <div className="flex flex-wrap items-center gap-3">
-          <h2
-            id="optimization-progress-heading"
-            className="text-lg font-semibold text-blue-950"
-          >
-            Optimization {presentation.label.toLowerCase()}
-          </h2>
-          <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${presentation.className}`}>
-            {presentation.label}
-          </span>
-        </div>
-        <p className="mt-2 text-sm leading-6 text-blue-900">
-          Run {run.id} is persisted. The page will continue reading the server
-          resource until it reaches a terminal state.
-        </p>
-      </section>
-    );
+  if (error.status === 403) {
+    return "Optimization access denied";
   }
-
-  if (run.status === "FAILED") {
-    return (
-      <section
-        className="rounded-3xl border border-rose-200 bg-rose-50 p-5 sm:p-6"
-        aria-labelledby="optimization-failed-heading"
-        role="alert"
-      >
-        <div className="flex flex-wrap items-center gap-3">
-          <h2
-            id="optimization-failed-heading"
-            className="text-lg font-semibold text-rose-950"
-          >
-            Optimization run failed
-          </h2>
-          <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${presentation.className}`}>
-            {presentation.label}
-          </span>
-        </div>
-        <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-rose-800">
-          {humanizeCode(run.failure_code || "OPTIMIZATION_FAILED")}
-        </p>
-        <p className="mt-1 text-sm leading-6 text-rose-950">
-          {run.failure_message || "The server did not provide a failure diagnostic."}
-        </p>
-        <p className="mt-3 text-xs text-rose-800">
-          This failed run remains persisted as {run.id}. Adjust the controls and
-          submit a new run rather than rewriting this resource.
-        </p>
-      </section>
-    );
+  if (error.status === 404) {
+    return "Optimization source was not found";
   }
-
-  return null;
-}
-
-function SuccessfulRunResult({
-  run,
-  assetLabels,
-}: {
-  run: OptimizationRun;
-  assetLabels: ReadonlyMap<string, string>;
-}) {
-  if (run.status !== "SUCCEEDED" || run.result === null) {
-    return null;
+  if (error.status === 503) {
+    return "Optimization data provider unavailable";
   }
-
-  const portfolio = run.result.portfolio;
-
-  return (
-    <section
-      className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
-      aria-labelledby="active-run-result-heading"
-    >
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
-            Persisted server result
-          </p>
-          <h2
-            id="active-run-result-heading"
-            className="mt-1 text-lg font-semibold text-slate-950"
-          >
-            {methodLabel(run.method)}
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Run {run.id}
-          </p>
-        </div>
-        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
-          Succeeded
-        </span>
-      </div>
-
-      {portfolio ? (
-        <>
-          <dl className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <OptimizationMetric
-              label="Expected annual return"
-              value={formatPercent(portfolio.expected_return)}
-            />
-            <OptimizationMetric
-              label="Expected annual volatility"
-              value={formatPercent(portfolio.expected_volatility)}
-            />
-            <OptimizationMetric
-              label="Sharpe ratio"
-              value={formatRatio(portfolio.sharpe_ratio)}
-            />
-            <OptimizationMetric
-              label="Target return"
-              value={formatPercent(portfolio.target_return)}
-            />
-          </dl>
-
-          <div className="mt-5 overflow-x-auto">
-            <table className="w-full min-w-[520px] border-collapse text-left text-sm">
-              <caption className="sr-only">
-                Server-provided optimized asset weights.
-              </caption>
-              <thead>
-                <tr className="border-b border-slate-200 text-xs text-slate-500">
-                  <th className="py-2 pr-4 font-semibold">Asset</th>
-                  <th className="py-2 font-semibold">Optimized weight</th>
-                </tr>
-              </thead>
-              <tbody>
-                {portfolio.weights.map((weight) => (
-                  <tr
-                    key={weight.asset_id}
-                    className="border-b border-slate-100 last:border-0"
-                  >
-                    <th className="py-2 pr-4 font-semibold text-slate-900">
-                      {assetLabels.get(weight.asset_id) ?? weight.asset_id}
-                    </th>
-                    <td className="py-2 tabular-nums text-slate-700">
-                      {formatPercent(weight.weight)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      ) : (
-        <p className="mt-4 text-sm text-slate-600">
-          This successful run contains frontier points rather than a single
-          optimized portfolio.
-        </p>
-      )}
-
-      {run.warnings.length > 0 ? (
-        <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-          <h3 className="font-semibold text-amber-950">Server warnings</h3>
-          <ul className="mt-2 space-y-2 text-sm text-amber-950">
-            {run.warnings.map((warning) => (
-              <li key={`${warning.code}-${warning.message}`}>
-                <span className="font-semibold">{humanizeCode(warning.code)}:</span>{" "}
-                {warning.message}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </section>
-  );
+  return "Optimization request failed";
 }
 
-function RunProvenance({ run }: { run: OptimizationRun }) {
-  return (
-    <section
-      className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
-      aria-labelledby="optimization-provenance-heading"
-    >
-      <h2
-        id="optimization-provenance-heading"
-        className="text-lg font-semibold text-slate-950"
-      >
-        Assumptions and provenance
-      </h2>
-      <p className="mt-1 text-sm text-slate-500">
-        Reproducibility metadata persisted with this optimization run.
-      </p>
-
-      <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2 xl:grid-cols-4">
-        <div>
-          <dt className="text-xs text-slate-500">Requested period</dt>
-          <dd className="mt-1 font-medium text-slate-900">
-            {run.provenance.period_start} to {run.provenance.period_end_exclusive}
-            {" "}(end exclusive)
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-slate-500">Provider</dt>
-          <dd className="mt-1 font-medium text-slate-900">
-            {run.provenance.provider || "Not available"}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-slate-500">Price field</dt>
-          <dd className="mt-1 font-medium text-slate-900">
-            {run.provenance.price_field || "Not available"}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-slate-500">Annualization factor</dt>
-          <dd className="mt-1 font-medium tabular-nums text-slate-900">
-            {run.provenance.annualization_factor}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-slate-500">Risk-free rate</dt>
-          <dd className="mt-1 font-medium tabular-nums text-slate-900">
-            {formatPercent(run.provenance.risk_free_rate_annual)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-slate-500">Observations</dt>
-          <dd className="mt-1 font-medium tabular-nums text-slate-900">
-            {formatCount(run.parameters.observations)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-slate-500">Covariance rank</dt>
-          <dd className="mt-1 font-medium tabular-nums text-slate-900">
-            {formatCount(run.parameters.covariance_rank)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-slate-500">Benchmark asset</dt>
-          <dd className="mt-1 break-all font-medium text-slate-900">
-            {run.provenance.benchmark_asset_id ?? "Not configured"}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-slate-500">Engine version</dt>
-          <dd className="mt-1 font-medium text-slate-900">
-            {run.provenance.engine_version || "Not available"}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-slate-500">Method version</dt>
-          <dd className="mt-1 font-medium text-slate-900">
-            {run.provenance.method_version || "Not available"}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-slate-500">Data retrieved</dt>
-          <dd className="mt-1 font-medium text-slate-900">
-            {formatDateTime(run.provenance.data_retrieved_at)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-slate-500">Completed</dt>
-          <dd className="mt-1 font-medium text-slate-900">
-            {formatDateTime(run.completed_at)}
-          </dd>
-        </div>
-        <div className="sm:col-span-2 xl:col-span-4">
-          <dt className="text-xs text-slate-500">Source-data fingerprint</dt>
-          <dd className="mt-1 break-all font-mono text-xs text-slate-700">
-            {run.provenance.data_fingerprint || "Not available"}
-          </dd>
-        </div>
-      </dl>
-    </section>
-  );
+function runSourceLabel(run: OptimizationRun): string {
+  return run.source_type === "AD_HOC"
+    ? "Ad hoc"
+    : `Portfolio-derived${run.portfolio_name ? ` · ${run.portfolio_name}` : ""}`;
 }
 
-function AllocationLabSkeleton() {
+function LabSkeleton() {
   return (
     <div aria-label="Loading Allocation Lab">
-      <Skeleton className="h-64 w-full rounded-3xl" />
-      <Skeleton className="mt-5 h-72 w-full rounded-3xl" />
+      <Skeleton className="h-40 w-full rounded-3xl" />
+      <Skeleton className="mt-5 h-96 w-full rounded-3xl" />
     </div>
   );
 }
 
 export function AllocationLabPage() {
-  const { portfolioId } = useParams<{ portfolioId: string }>();
-  const [searchParams] = useSearchParams();
+  const { portfolioId: legacyPortfolioId } =
+    useParams<{ portfolioId?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queryPortfolioId = searchParams.get("portfolio");
   const rangeParam = searchParams.get("range");
-  const range: DashboardRange = isDashboardRange(rangeParam) ? rangeParam : "1M";
+  const requestedPortfolioId = legacyPortfolioId ?? queryPortfolioId;
+  const initialMode: SourceMode = requestedPortfolioId ? "PORTFOLIO" : "AD_HOC";
+  const defaults = useMemo(defaultDates, []);
 
-  const portfoliosQuery = usePortfolios();
-  const selectedPortfolio = portfoliosQuery.data?.find(
-    (portfolio) => portfolio.id === portfolioId,
-  );
-
-  const dashboardDates = useMemo(() => {
-    if (!selectedPortfolio) {
-      return null;
-    }
-    return resolveDashboardDateRange(range, selectedPortfolio.created_at);
-  }, [range, selectedPortfolio]);
-
-  const dashboardRequest =
-    portfolioId && dashboardDates
-      ? {
-          portfolioId,
-          start: dashboardDates.start,
-          end: dashboardDates.end,
-        }
-      : null;
-
-  const snapshotQuery = useDashboardSnapshot(dashboardRequest);
-  const scopedPortfolioId = selectedPortfolio?.id ?? null;
-  const runsQuery = useOptimizationRuns(scopedPortfolioId);
-  const createRun = useCreateOptimizationRun(scopedPortfolioId);
-
-  const [startOverride, setStartOverride] = useState<string | null>(null);
-  const [endOverride, setEndOverride] = useState<string | null>(null);
-  const [method, setMethod] = useState<OptimizationRunMethod>("MINIMUM_VARIANCE");
+  const [sourceMode, setSourceMode] = useState<SourceMode>(initialMode);
+  const [portfolioId, setPortfolioId] = useState(requestedPortfolioId ?? "");
+  const [start, setStart] = useState(defaults.start);
+  const [end, setEnd] = useState(defaults.end);
+  const [method, setMethod] =
+    useState<OptimizationRunMethod>("MINIMUM_VARIANCE");
+  const [riskFreeRate, setRiskFreeRate] = useState("0");
   const [frontierPoints, setFrontierPoints] = useState("25");
-  const [assetControls, setAssetControls] = useState<Record<string, AssetControlState>>({});
+  const [symbolInput, setSymbolInput] = useState("");
+  const [assets, setAssets] = useState<Record<string, AssetControlState>>({});
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [assetMessage, setAssetMessage] = useState<string | null>(null);
 
-  const start = startOverride ?? dashboardDates?.start ?? "";
-  const end = endOverride ?? dashboardDates?.end ?? "";
+  const portfoliosQuery = usePortfolios();
+  const assetCatalogQuery = useAssetCatalog();
+  const resolveAssetsMutation = useResolveAssets();
+  const runsQuery = useOptimizationRuns();
+  const createRun = useCreateOptimizationRun();
+  const activeRunQuery = useOptimizationRun(activeRunId);
 
-  const eligibleHoldings = useMemo(
-    () =>
-      snapshotQuery.data?.holdings?.holdings.filter(isEligibleHolding) ?? [],
-    [snapshotQuery.data?.holdings?.holdings],
+  const dashboardRequest =
+    sourceMode === "PORTFOLIO" && portfolioId && start < end
+      ? { portfolioId, start, end }
+      : null;
+  const snapshotQuery = useDashboardSnapshot(dashboardRequest);
+  const selectedPortfolio =
+    portfoliosQuery.data?.find((portfolio) => portfolio.id === portfolioId) ?? null;
+
+  const selectedAssets = useMemo(
+    () => Object.values(assets),
+    [assets],
   );
-
-  useEffect(() => {
-    if (eligibleHoldings.length === 0) {
-      return;
-    }
-
-    setAssetControls((current) => {
-      const next = { ...current };
-      let changed = false;
-
-      for (const holding of eligibleHoldings) {
-        if (!(holding.asset_id in next)) {
-          next[holding.asset_id] = {
-            selected: true,
-            minimum: "0",
-            maximum: "1",
-          };
-          changed = true;
-        }
-      }
-
-      return changed ? next : current;
-    });
-  }, [eligibleHoldings]);
-
   const selectedAssetIds = useMemo(
+    () => selectedAssets.map((item) => item.asset.id),
+    [selectedAssets],
+  );
+  const assetLabels = useMemo(
     () =>
-      eligibleHoldings
-        .filter((holding) => assetControls[holding.asset_id]?.selected ?? false)
-        .map((holding) => holding.asset_id),
-    [assetControls, eligibleHoldings],
+      new Map(
+        selectedAssets.map(
+          (item) =>
+            [
+              item.asset.id,
+              `${item.asset.symbol} — ${item.asset.name}`,
+            ] as const,
+        ),
+      ),
+    [selectedAssets],
   );
 
+  const parsedRiskFreeRate = Number(riskFreeRate);
   const submittedBounds = useMemo<OptimizationWeightBoundRequest[]>(
     () =>
-      selectedAssetIds.flatMap((assetId) => {
-        const control = assetControls[assetId];
-        if (!control) {
-          return [];
-        }
-        return [
-          {
-            asset_id: assetId,
-            minimum:
-              control.minimum.trim() === "" ? Number.NaN : Number(control.minimum),
-            maximum:
-              control.maximum.trim() === "" ? Number.NaN : Number(control.maximum),
-          },
-        ];
-      }),
-    [assetControls, selectedAssetIds],
+      selectedAssets
+        .filter((item) => item.minimum !== "" || item.maximum !== "")
+        .map((item) => ({
+          asset_id: item.asset.id,
+          minimum: Number(item.minimum || "0"),
+          maximum: Number(item.maximum || "1"),
+        })),
+    [selectedAssets],
   );
 
-  const controlContext: OptimizationControlContext = useMemo(
-    () => ({
+  const comparisonContext = useMemo<OptimizationControlContext | null>(() => {
+    if (!start || !end || !Number.isFinite(parsedRiskFreeRate)) {
+      return null;
+    }
+    return {
+      sourceType: sourceMode,
+      portfolioId: sourceMode === "PORTFOLIO" ? portfolioId || null : null,
       start,
       end,
       assetIds: selectedAssetIds,
       bounds: submittedBounds,
-    }),
-    [end, selectedAssetIds, start, submittedBounds],
-  );
+      riskFreeRateAnnual: parsedRiskFreeRate,
+    };
+  }, [
+    end,
+    parsedRiskFreeRate,
+    portfolioId,
+    selectedAssetIds,
+    sourceMode,
+    start,
+    submittedBounds,
+  ]);
 
-  const activeRunQuery = useOptimizationRun(activeRunId);
-  const activeRun = activeRunQuery.data ?? null;
+  const availableRuns = runsQuery.data ?? [];
+  const equalRun =
+    comparisonContext === null
+      ? null
+      : latestSuccessfulOptimizationRun(
+          availableRuns,
+          "EQUAL_WEIGHT",
+          comparisonContext,
+        );
+  const minimumVarianceRun =
+    comparisonContext === null
+      ? null
+      : latestSuccessfulOptimizationRun(
+          availableRuns,
+          "MINIMUM_VARIANCE",
+          comparisonContext,
+        );
+  const maximumSharpeRun =
+    comparisonContext === null
+      ? null
+      : latestSuccessfulOptimizationRun(
+          availableRuns,
+          "MAXIMUM_SHARPE",
+          comparisonContext,
+        );
+  const frontierRun =
+    comparisonContext === null
+      ? null
+      : latestSuccessfulOptimizationRun(
+          availableRuns,
+          "EFFICIENT_FRONTIER",
+          comparisonContext,
+        );
 
-  const availableRuns = useMemo(() => {
-    const runs = runsQuery.data ?? [];
-    if (activeRun === null || runs.some((run) => run.id === activeRun.id)) {
-      return runs;
+  const currentHoldingWeightByAsset = useMemo(() => {
+    const map = new Map<string, number | null>();
+    for (const holding of snapshotQuery.data?.holdings?.holdings ?? []) {
+      map.set(holding.asset_id, holding.weight);
     }
-    return [activeRun, ...runs];
-  }, [activeRun, runsQuery.data]);
-
-  const equalWeightRun = latestSuccessfulOptimizationRun(
-    availableRuns,
-    "EQUAL_WEIGHT",
-    controlContext,
-  );
-  const minimumVarianceRun = latestSuccessfulOptimizationRun(
-    availableRuns,
-    "MINIMUM_VARIANCE",
-    controlContext,
-  );
-  const maximumSharpeRun = latestSuccessfulOptimizationRun(
-    availableRuns,
-    "MAXIMUM_SHARPE",
-    controlContext,
-  );
-  const frontierRun = latestSuccessfulOptimizationRun(
-    availableRuns,
-    "EFFICIENT_FRONTIER",
-    controlContext,
-  );
-
-  const frontierPointsForContext = frontierRun?.result?.frontier ?? [];
-
-  const holdingByAsset = useMemo(
-    () => new Map(eligibleHoldings.map((holding) => [holding.asset_id, holding] as const)),
-    [eligibleHoldings],
-  );
-
-  const assetLabels = useMemo(
-    () =>
-      new Map(
-        eligibleHoldings.map(
-          (holding) => [holding.asset_id, `${holding.symbol} · ${holding.name}`] as const,
-        ),
-      ),
-    [eligibleHoldings],
-  );
+    return map;
+  }, [snapshotQuery.data?.holdings?.holdings]);
 
   const comparisonRows = useMemo<AllocationComparisonRow[]>(
     () =>
-      selectedAssetIds.map((assetId) => {
-        const holding = holdingByAsset.get(assetId);
+      selectedAssets.map((item) => {
+        const baseline =
+          sourceMode === "AD_HOC" && item.baseline !== ""
+            ? Number(item.baseline)
+            : sourceMode === "PORTFOLIO"
+              ? currentHoldingWeightByAsset.get(item.asset.id) ?? null
+              : null;
+
         return {
-          assetId,
-          label: holding ? holding.symbol : assetId,
-          currentWeight: holding?.weight ?? null,
-          equalWeight: optimizedWeightForAsset(equalWeightRun, assetId),
-          minimumVarianceWeight: optimizedWeightForAsset(minimumVarianceRun, assetId),
-          maximumSharpeWeight: optimizedWeightForAsset(maximumSharpeRun, assetId),
+          assetId: item.asset.id,
+          label: item.asset.symbol,
+          currentWeight: Number.isFinite(baseline) ? baseline : null,
+          equalWeight: optimizedWeightForAsset(equalRun, item.asset.id),
+          minimumVarianceWeight: optimizedWeightForAsset(
+            minimumVarianceRun,
+            item.asset.id,
+          ),
+          maximumSharpeWeight: optimizedWeightForAsset(
+            maximumSharpeRun,
+            item.asset.id,
+          ),
         };
       }),
     [
-      equalWeightRun,
-      holdingByAsset,
+      currentHoldingWeightByAsset,
+      equalRun,
       maximumSharpeRun,
       minimumVarianceRun,
-      selectedAssetIds,
+      selectedAssets,
+      sourceMode,
     ],
   );
 
-  const createApiError = createRun.error instanceof ApiError ? createRun.error : null;
-  const validationErrors = apiValidationErrors(createApiError);
+  const activeRun =
+    activeRunQuery.data ??
+    availableRuns.find((run) => run.id === activeRunId) ??
+    null;
 
-  const header = (
-    <div className="mx-auto flex min-h-20 w-full max-w-[1600px] flex-wrap items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
-          {portfolioId ? (
-            <Link
-              to={`/portfolios/${encodeURIComponent(portfolioId)}/dashboard?range=${encodeURIComponent(range)}`}
-              className="outline-none hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-            >
-              Portfolio dashboard
-            </Link>
-          ) : null}
-          <span aria-hidden="true">/</span>
-          <span>Allocation Lab</span>
-        </div>
-        <h1 className="mt-1 truncate text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">
-          Allocation Lab
-        </h1>
-        {selectedPortfolio ? (
-          <p className="mt-1 truncate text-xs font-medium text-slate-500">
-            {selectedPortfolio.name}
-          </p>
-        ) : null}
-      </div>
-      <span className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-800">
-        Hypothetical optimization
-      </span>
-    </div>
-  );
+  useEffect(() => {
+    if (legacyPortfolioId) {
+      setSourceMode("PORTFOLIO");
+      setPortfolioId(legacyPortfolioId);
+    }
+  }, [legacyPortfolioId]);
+
+  useEffect(() => {
+    if (
+      sourceMode !== "PORTFOLIO" ||
+      selectedPortfolio === null ||
+      !isDashboardRange(rangeParam)
+    ) {
+      return;
+    }
+
+    const dates = resolveDashboardDateRange(
+      rangeParam,
+      selectedPortfolio.created_at,
+    );
+    setStart(dates.start);
+    setEnd(dates.end);
+  }, [rangeParam, selectedPortfolio, sourceMode]);
+
+  function updateSourceMode(next: SourceMode) {
+    setSourceMode(next);
+    setActiveRunId(null);
+    setAssets({});
+    setFormError(null);
+    setAssetMessage(null);
+
+    const nextParams = new URLSearchParams(searchParams);
+    if (next === "AD_HOC") {
+      nextParams.delete("portfolio");
+      setPortfolioId("");
+    } else if (portfolioId) {
+      nextParams.set("portfolio", portfolioId);
+    }
+    if (!legacyPortfolioId) {
+      setSearchParams(nextParams, { replace: true });
+    }
+  }
+
+  function updatePortfolio(nextPortfolioId: string) {
+    setPortfolioId(nextPortfolioId);
+    setAssets({});
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextPortfolioId) {
+      nextParams.set("portfolio", nextPortfolioId);
+    } else {
+      nextParams.delete("portfolio");
+    }
+    if (!legacyPortfolioId) {
+      setSearchParams(nextParams, { replace: true });
+    }
+  }
+
+  async function addSymbols(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const symbols = parseSymbols(symbolInput);
+    if (symbols.length === 0) {
+      setAssetMessage("Enter at least one ticker symbol.");
+      return;
+    }
+
+    try {
+      const result = await resolveAssetsMutation.mutateAsync({ symbols });
+      setAssets((currentAssets) => {
+        const next = { ...currentAssets };
+        for (const outcome of result.outcomes) {
+          if (outcome.status === "RESOLVED" && outcome.asset !== null) {
+            next[outcome.asset.id] ??= {
+              asset: outcome.asset,
+              minimum: "0",
+              maximum: "1",
+              baseline: "",
+            };
+          }
+        }
+        return next;
+      });
+
+      const unresolved = result.outcomes.filter(
+        (outcome) => outcome.status !== "RESOLVED",
+      );
+      setAssetMessage(
+        unresolved.length === 0
+          ? `Added ${result.outcomes.length} canonical asset${
+              result.outcomes.length === 1 ? "" : "s"
+            }.`
+          : unresolved
+              .map(
+                (outcome) =>
+                  `${outcome.symbol}: ${outcome.warning ?? outcome.status}`,
+              )
+              .join(" · "),
+      );
+      setSymbolInput("");
+    } catch (error) {
+      setAssetMessage(
+        error instanceof Error ? error.message : "Asset resolution failed.",
+      );
+    }
+  }
+
+  function importPortfolioHoldings() {
+    const holdings = snapshotQuery.data?.holdings?.holdings ?? [];
+    const catalogById = new Map(
+      (assetCatalogQuery.data ?? []).map((asset) => [asset.id, asset] as const),
+    );
+
+    const next: Record<string, AssetControlState> = {};
+    for (const holding of holdings) {
+      if (
+        holding.asset_type !== "STOCK" &&
+        holding.asset_type !== "ETF"
+      ) {
+        continue;
+      }
+      const catalogAsset = catalogById.get(holding.asset_id);
+      const asset: AssetCatalogItem =
+        catalogAsset ?? {
+          id: holding.asset_id,
+          symbol: holding.symbol,
+          name: holding.name,
+          asset_type: holding.asset_type,
+          exchange: "",
+          currency: holding.currency,
+        };
+      next[asset.id] = {
+        asset,
+        minimum: "0",
+        maximum: "1",
+        baseline: "",
+      };
+    }
+    setAssets(next);
+    setAssetMessage(
+      Object.keys(next).length > 0
+        ? `Imported ${Object.keys(next).length} current eligible holding${
+            Object.keys(next).length === 1 ? "" : "s"
+          } without changing the portfolio.`
+        : "This portfolio has no eligible current stock/ETF holdings to import.",
+    );
+  }
+
+  function removeAsset(assetId: string) {
+    setAssets((currentAssets) => {
+      const next = { ...currentAssets };
+      delete next[assetId];
+      return next;
+    });
+  }
 
   function updateAssetControl(
     assetId: string,
-    patch: Partial<AssetControlState>,
+    field: "minimum" | "maximum" | "baseline",
+    value: string,
   ) {
-    setAssetControls((current) => ({
-      ...current,
+    setAssets((currentAssets) => ({
+      ...currentAssets,
       [assetId]: {
-        selected: current[assetId]?.selected ?? true,
-        minimum: current[assetId]?.minimum ?? "0",
-        maximum: current[assetId]?.maximum ?? "1",
-        ...patch,
+        ...currentAssets[assetId]!,
+        [field]: value,
       },
     }));
+  }
+
+  function baselineRequest():
+    | OptimizationBaselineWeightRequest[]
+    | undefined {
+    if (sourceMode !== "AD_HOC") {
+      return undefined;
+    }
+    const values = selectedAssets.map((item) => item.baseline);
+    const anySupplied = values.some((value) => value !== "");
+    if (!anySupplied) {
+      return undefined;
+    }
+    if (values.some((value) => value === "")) {
+      throw new Error(
+        "If a custom baseline is supplied, enter a baseline weight for every selected asset.",
+      );
+    }
+    const baseline = selectedAssets.map((item) => ({
+      asset_id: item.asset.id,
+      weight: Number(item.baseline),
+    }));
+    if (baseline.some((item) => !Number.isFinite(item.weight) || item.weight < 0 || item.weight > 1)) {
+      throw new Error("Baseline weights must be finite values from 0 through 1.");
+    }
+    const total = baseline.reduce((sum, item) => sum + item.weight, 0);
+    if (Math.abs(total - 1) > 1e-8) {
+      throw new Error("Complete custom baseline weights must sum to 100%.");
+    }
+    return baseline;
   }
 
   async function submitOptimization(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!portfolioId) {
-      setFormError("Portfolio context is unavailable.");
-      return;
-    }
     if (!start || !end || start >= end) {
       setFormError("Choose a start date earlier than the exclusive end date.");
       return;
     }
     if (selectedAssetIds.length === 0) {
-      setFormError("Select at least one eligible held asset.");
+      setFormError("Add at least one canonical asset to the optimization universe.");
+      return;
+    }
+    if (!Number.isFinite(parsedRiskFreeRate)) {
+      setFormError("Annual risk-free rate must be a finite decimal value.");
       return;
     }
 
@@ -782,570 +571,636 @@ export function AllocationLabPage() {
         bound.minimum > bound.maximum
       ) {
         setFormError(
-          "Each selected asset requires finite bounds between 0 and 1 with minimum no greater than maximum.",
+          "Every asset bound must satisfy 0 ≤ minimum ≤ maximum ≤ 1.",
         );
         return;
       }
     }
 
+    let baseline: OptimizationBaselineWeightRequest[] | undefined;
+    try {
+      baseline = baselineRequest();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Invalid baseline.");
+      return;
+    }
+
     const request: OptimizationRunCreateRequest = {
-      portfolio_id: portfolioId,
+      source_type: sourceMode,
+      portfolio_id: sourceMode === "PORTFOLIO" ? portfolioId : null,
       method,
       start,
       end,
       asset_ids: selectedAssetIds,
       bounds: submittedBounds,
+      baseline_weights: baseline,
+      risk_free_rate_annual: parsedRiskFreeRate,
     };
 
+    if (sourceMode === "PORTFOLIO" && !portfolioId) {
+      setFormError("Select an owned portfolio before running portfolio-derived optimization.");
+      return;
+    }
+
     if (method === "EFFICIENT_FRONTIER") {
-      const parsedFrontierPoints = Number(frontierPoints);
-      if (
-        !Number.isInteger(parsedFrontierPoints) ||
-        parsedFrontierPoints < 2 ||
-        parsedFrontierPoints > 100
-      ) {
+      const points = Number(frontierPoints);
+      if (!Number.isInteger(points) || points < 2 || points > 100) {
         setFormError("Efficient-frontier points must be an integer from 2 through 100.");
         return;
       }
-      request.frontier_points = parsedFrontierPoints;
+      request.frontier_points = points;
     }
 
     setFormError(null);
-
     try {
       const run = await createRun.mutateAsync(request);
       setActiveRunId(run.id);
-    } catch {
-      // Mutation state renders the authoritative transport/validation failure.
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Optimization request failed.");
     }
   }
 
-  if (portfoliosQuery.isPending && selectedPortfolio === undefined) {
-    return (
-      <DashboardShell header={header}>
-        <AllocationLabSkeleton />
-      </DashboardShell>
-    );
-  }
+  const header = (
+    <div className="mx-auto flex min-h-20 w-full max-w-[1600px] flex-wrap items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">
+          Research workspace
+        </p>
+        <h1 className="mt-1 text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">
+          Allocation Lab
+        </h1>
+        <p className="mt-1 text-xs text-slate-500">
+          Build a hypothetical universe or import an owned portfolio without mutating its ledger.
+        </p>
+      </div>
+      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+        Server-authoritative optimization
+      </span>
+    </div>
+  );
 
-  if (!portfoliosQuery.isPending && portfoliosQuery.data && !selectedPortfolio) {
+  if (portfoliosQuery.isPending || assetCatalogQuery.isPending) {
     return (
       <DashboardShell header={header}>
-        <StatePanel
-          title="Portfolio not found"
-          message="This portfolio is not available in the authenticated account scope."
-          tone="error"
-          action={
-            <Link
-              to="/"
-              className="inline-flex rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white"
-            >
-              Choose a portfolio
-            </Link>
-          }
-        />
+        <LabSkeleton />
       </DashboardShell>
     );
   }
 
   return (
     <DashboardShell header={header}>
-      <section className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm text-slate-600">
-            Server-authoritative historical optimization. Results are hypothetical
-            analysis, not trade instructions, and no portfolio ledger or holdings are
-            mutated by this page.
+      <div className="space-y-5">
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <h2 className="text-lg font-semibold text-slate-950">Allocation source</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Ad hoc analysis does not create a real portfolio. Existing-portfolio import is read-only.
           </p>
-          {portfolioId ? (
-            <div className="mt-2 flex flex-wrap gap-4 text-sm font-semibold">
-              <Link
-                to={`/portfolios/${encodeURIComponent(portfolioId)}/dashboard?range=${encodeURIComponent(range)}`}
-                className="text-slate-700 outline-none underline decoration-slate-200 underline-offset-4 hover:text-slate-950 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-              >
-                ← Back to dashboard
-              </Link>
-              <Link
-                to={`/portfolios/${encodeURIComponent(portfolioId)}/analysis?range=${encodeURIComponent(range)}`}
-                className="text-blue-700 outline-none underline decoration-blue-200 underline-offset-4 hover:text-blue-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-              >
-                Portfolio analysis
-              </Link>
-            </div>
-          ) : null}
-        </div>
-        <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-          Range context {range}
-        </span>
-      </section>
 
-      {snapshotQuery.isPending && snapshotQuery.data === undefined ? (
-        <AllocationLabSkeleton />
-      ) : snapshotQuery.error instanceof Error && snapshotQuery.data === undefined ? (
-        <StatePanel
-          title={transportErrorTitle(snapshotQuery.error)}
-          message={snapshotQuery.error.message}
-          tone="error"
-          action={
+          <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Allocation source mode">
             <button
               type="button"
-              onClick={() => void snapshotQuery.refetch()}
-              className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              aria-pressed={sourceMode === "AD_HOC"}
+              onClick={() => updateSourceMode("AD_HOC")}
+              className={`rounded-xl border px-4 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                sourceMode === "AD_HOC"
+                  ? "border-blue-300 bg-blue-50 text-blue-900"
+                  : "border-slate-200 bg-white text-slate-700"
+              }`}
             >
-              Retry portfolio data
+              Ad hoc portfolio
             </button>
-          }
-        />
-      ) : eligibleHoldings.length === 0 ? (
-        <StatePanel
-          title="No eligible holdings"
-          message="The selected portfolio has no current supported USD stock or ETF holdings available for optimization. Add eligible holdings before creating an optimization run."
-        />
-      ) : (
-        <>
-          <section
-            className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
-            aria-labelledby="optimization-controls-heading"
-          >
-            <div className="max-w-3xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-700">
-                Optimization controls
-              </p>
-              <h2
-                id="optimization-controls-heading"
-                className="mt-1 text-lg font-semibold text-slate-950"
+            <button
+              type="button"
+              aria-pressed={sourceMode === "PORTFOLIO"}
+              onClick={() => updateSourceMode("PORTFOLIO")}
+              className={`rounded-xl border px-4 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                sourceMode === "PORTFOLIO"
+                  ? "border-blue-300 bg-blue-50 text-blue-900"
+                  : "border-slate-200 bg-white text-slate-700"
+              }`}
+            >
+              Existing portfolio
+            </button>
+          </div>
+
+          {sourceMode === "PORTFOLIO" ? (
+            <div className="mt-5 flex flex-wrap items-end gap-3">
+              <label className="block min-w-64 text-xs font-semibold text-slate-700">
+                Owned portfolio
+                <select
+                  value={portfolioId}
+                  onChange={(event) => updatePortfolio(event.target.value)}
+                  className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                >
+                  <option value="">Select portfolio</option>
+                  {(portfoliosQuery.data ?? []).map((portfolio) => (
+                    <option key={portfolio.id} value={portfolio.id}>
+                      {portfolio.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                disabled={!portfolioId || snapshotQuery.isPending}
+                onClick={importPortfolioHoldings}
+                className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50"
               >
-                Create a persisted optimization run
-              </h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">
-                Ticker labels are for display only. Requests submit canonical asset
-                IDs and the backend remains authoritative for feasibility, market
-                data, estimation, solving, and post-solver validation.
-              </p>
+                {snapshotQuery.isPending ? "Loading holdings…" : "Import current holdings"}
+              </button>
+              {selectedPortfolio ? (
+                <Link
+                  to={`/portfolios/${encodeURIComponent(selectedPortfolio.id)}/dashboard${
+                    isDashboardRange(rangeParam)
+                      ? `?range=${encodeURIComponent(rangeParam)}`
+                      : ""
+                  }`}
+                  className="pb-2 text-sm font-semibold text-blue-700 underline underline-offset-4"
+                >
+                  Open portfolio dashboard
+                </Link>
+              ) : null}
             </div>
-
-            <form className="mt-5 space-y-5" onSubmit={submitOptimization}>
-              <div className="grid gap-4 md:grid-cols-4">
-                <label className="text-xs font-semibold text-slate-700">
-                  Start
-                  <input
-                    type="date"
-                    value={start}
-                    onChange={(event) => setStartOverride(event.target.value)}
-                    className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                  />
-                </label>
-
-                <label className="text-xs font-semibold text-slate-700">
-                  End (exclusive)
-                  <input
-                    type="date"
-                    value={end}
-                    onChange={(event) => setEndOverride(event.target.value)}
-                    className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                  />
-                </label>
-
-                <div className="md:col-span-2">
-                  <label
-                    htmlFor="optimization-method"
-                    className="text-xs font-semibold text-slate-700"
-                  >
-                    Optimization method
-                  </label>
-                  <select
-                    id="optimization-method"
-                    aria-describedby="optimization-method-description"
-                    value={method}
-                    onChange={(event) =>
-                      setMethod(event.target.value as OptimizationRunMethod)
-                    }
-                    className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                  >
-                    {METHOD_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <span
-                    id="optimization-method-description"
-                    className="mt-1 block text-xs font-normal leading-5 text-slate-500"
-                  >
-                    {currentMethodDescription(method)}
-                  </span>
-                </div>
+          ) : (
+            <form className="mt-5" onSubmit={addSymbols}>
+              <label htmlFor="allocation-symbols" className="text-xs font-semibold text-slate-700">
+                Add ticker symbols
+              </label>
+              <div className="mt-1 flex flex-col gap-2 sm:flex-row">
+                <input
+                  id="allocation-symbols"
+                  value={symbolInput}
+                  onChange={(event) => setSymbolInput(event.target.value)}
+                  placeholder="AAPL, MSFT, QQQ"
+                  className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm uppercase outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                />
+                <button
+                  type="submit"
+                  disabled={resolveAssetsMutation.isPending}
+                  className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50"
+                >
+                  {resolveAssetsMutation.isPending ? "Resolving…" : "Add canonical assets"}
+                </button>
               </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Symbols are resolved through the server's canonical asset/discovery boundary.
+              </p>
+            </form>
+          )}
 
+          {assetMessage ? (
+            <p className="mt-3 text-sm text-slate-700" role="status">
+              {assetMessage}
+            </p>
+          ) : null}
+        </section>
+
+        <form className="space-y-5" onSubmit={submitOptimization}>
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <h2 className="text-lg font-semibold text-slate-950">Configuration</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              These are supported user-controlled inputs. Canonical methodology remains fixed below.
+            </p>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <label className="block text-xs font-semibold text-slate-700">
+                Analysis start
+                <input
+                  type="date"
+                  value={start}
+                  onChange={(event) => setStart(event.target.value)}
+                  className="mt-1 block w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                />
+              </label>
+              <label className="block text-xs font-semibold text-slate-700">
+                End (exclusive)
+                <input
+                  type="date"
+                  value={end}
+                  onChange={(event) => setEnd(event.target.value)}
+                  className="mt-1 block w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                />
+              </label>
+              <label className="block text-xs font-semibold text-slate-700">
+                Optimization method
+                <select
+                  value={method}
+                  onChange={(event) =>
+                    setMethod(event.target.value as OptimizationRunMethod)
+                  }
+                  className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                >
+                  {METHOD_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-xs font-semibold text-slate-700">
+                Annual risk-free rate
+                <input
+                  type="number"
+                  step="0.0001"
+                  value={riskFreeRate}
+                  onChange={(event) => setRiskFreeRate(event.target.value)}
+                  className="mt-1 block w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                />
+              </label>
               {method === "EFFICIENT_FRONTIER" ? (
-                <div className="max-w-xs">
-                  <label
-                    htmlFor="frontier-points"
-                    className="block text-xs font-semibold text-slate-700"
-                  >
-                    Frontier points
-                  </label>
+                <label className="block text-xs font-semibold text-slate-700">
+                  Frontier points
                   <input
-                    id="frontier-points"
                     type="number"
                     min={2}
                     max={100}
                     step={1}
                     value={frontierPoints}
-                    aria-describedby="frontier-points-description"
                     onChange={(event) => setFrontierPoints(event.target.value)}
-                    className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal tabular-nums text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    className="mt-1 block w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                   />
-                  <span
-                    id="frontier-points-description"
-                    className="mt-1 block text-xs font-normal text-slate-500"
-                  >
-                    Only the exact server-returned points will be displayed.
-                  </span>
-                </div>
+                </label>
               ) : null}
+            </div>
 
-              <fieldset>
-                <legend className="text-sm font-semibold text-slate-950">
-                  Eligible held assets and bounds
-                </legend>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Bounds are decimal portfolio weights from 0 through 1. They are
-                  submitted unchanged; the backend rejects infeasible combinations.
-                </p>
-
-                <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200">
-                  <table className="w-full min-w-[760px] border-collapse text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500">
-                        <th className="px-4 py-3 font-semibold">Include</th>
-                        <th className="px-4 py-3 font-semibold">Asset</th>
-                        <th className="px-4 py-3 font-semibold">Current weight</th>
-                        <th className="px-4 py-3 font-semibold">Minimum</th>
-                        <th className="px-4 py-3 font-semibold">Maximum</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {eligibleHoldings.map((holding) => {
-                        const control = assetControls[holding.asset_id] ?? {
-                          selected: false,
-                          minimum: "0",
-                          maximum: "1",
-                        };
-                        const symbolId = `optimization-asset-${holding.asset_id}`;
-                        return (
-                          <tr
-                            key={holding.asset_id}
-                            className="border-b border-slate-100 last:border-0"
+            <div className="mt-6 overflow-x-auto">
+              <table className="w-full min-w-[820px] border-collapse text-left text-sm">
+                <caption className="sr-only">
+                  Optimization universe, baseline weights, and per-asset bounds.
+                </caption>
+                <thead>
+                  <tr className="border-b border-slate-200 text-xs text-slate-500">
+                    <th className="py-2 pr-4 font-semibold">Asset</th>
+                    <th className="py-2 pr-4 font-semibold">
+                      {sourceMode === "AD_HOC" ? "Custom baseline" : "Observed current"}
+                    </th>
+                    <th className="py-2 pr-4 font-semibold">Minimum weight</th>
+                    <th className="py-2 pr-4 font-semibold">Maximum weight</th>
+                    <th className="py-2 font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedAssets.map((item) => {
+                    const observed =
+                      sourceMode === "PORTFOLIO"
+                        ? currentHoldingWeightByAsset.get(item.asset.id) ?? null
+                        : null;
+                    return (
+                      <tr key={item.asset.id} className="border-b border-slate-100">
+                        <th className="py-3 pr-4">
+                          <span className="font-semibold text-slate-950">{item.asset.symbol}</span>
+                          <span className="ml-2 font-normal text-slate-500">{item.asset.name}</span>
+                        </th>
+                        <td className="py-3 pr-4">
+                          {sourceMode === "AD_HOC" ? (
+                            <input
+                              aria-label={`${item.asset.symbol} baseline weight`}
+                              type="number"
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              value={item.baseline}
+                              onChange={(event) =>
+                                updateAssetControl(
+                                  item.asset.id,
+                                  "baseline",
+                                  event.target.value,
+                                )
+                              }
+                              placeholder="optional"
+                              className="w-28 rounded-lg border border-slate-200 px-2 py-1.5 tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                            />
+                          ) : (
+                            <span className="tabular-nums">{formatPercent(observed)}</span>
+                          )}
+                        </td>
+                        <td className="py-3 pr-4">
+                          <input
+                            aria-label={`${item.asset.symbol} minimum weight`}
+                            type="number"
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            value={item.minimum}
+                            onChange={(event) =>
+                              updateAssetControl(
+                                item.asset.id,
+                                "minimum",
+                                event.target.value,
+                              )
+                            }
+                            className="w-28 rounded-lg border border-slate-200 px-2 py-1.5 tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                          />
+                        </td>
+                        <td className="py-3 pr-4">
+                          <input
+                            aria-label={`${item.asset.symbol} maximum weight`}
+                            type="number"
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            value={item.maximum}
+                            onChange={(event) =>
+                              updateAssetControl(
+                                item.asset.id,
+                                "maximum",
+                                event.target.value,
+                              )
+                            }
+                            className="w-28 rounded-lg border border-slate-200 px-2 py-1.5 tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                          />
+                        </td>
+                        <td className="py-3">
+                          <button
+                            type="button"
+                            onClick={() => removeAsset(item.asset.id)}
+                            className="font-semibold text-rose-700 outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
                           >
-                            <td className="px-4 py-3">
-                              <input
-                                id={symbolId}
-                                type="checkbox"
-                                aria-label={`${holding.symbol} ${holding.name}`}
-                                checked={control.selected}
-                                onChange={(event) =>
-                                  updateAssetControl(holding.asset_id, {
-                                    selected: event.target.checked,
-                                  })
-                                }
-                                className="h-4 w-4 rounded border-slate-300 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                              />
-                            </td>
-                            <th className="px-4 py-3 font-semibold text-slate-900">
-                              <span>
-                                {holding.symbol}
-                                <span className="ml-2 font-normal text-slate-500">
-                                  {holding.name}
-                                </span>
-                              </span>
-                              <span className="mt-0.5 block break-all text-[11px] font-normal text-slate-400">
-                                {holding.asset_id}
-                              </span>
-                            </th>
-                            <td className="px-4 py-3 tabular-nums text-slate-700">
-                              {formatPercent(holding.weight)}
-                            </td>
-                            <td className="px-4 py-3">
-                              <label className="sr-only" htmlFor={`min-${holding.asset_id}`}>
-                                {holding.symbol} minimum weight
-                              </label>
-                              <input
-                                id={`min-${holding.asset_id}`}
-                                type="number"
-                                min={0}
-                                max={1}
-                                step="0.01"
-                                disabled={!control.selected}
-                                value={control.minimum}
-                                onChange={(event) =>
-                                  updateAssetControl(holding.asset_id, {
-                                    minimum: event.target.value,
-                                  })
-                                }
-                                className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm tabular-nums text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-400"
-                              />
-                            </td>
-                            <td className="px-4 py-3">
-                              <label className="sr-only" htmlFor={`max-${holding.asset_id}`}>
-                                {holding.symbol} maximum weight
-                              </label>
-                              <input
-                                id={`max-${holding.asset_id}`}
-                                type="number"
-                                min={0}
-                                max={1}
-                                step="0.01"
-                                disabled={!control.selected}
-                                value={control.maximum}
-                                onChange={(event) =>
-                                  updateAssetControl(holding.asset_id, {
-                                    maximum: event.target.value,
-                                  })
-                                }
-                                className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm tabular-nums text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-400"
-                              />
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </fieldset>
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
-              {formError ? (
-                <p role="alert" className="text-sm font-medium text-rose-700">
-                  {formError}
-                </p>
-              ) : null}
-
-              {Object.keys(validationErrors).length > 0 ? (
-                <div
-                  className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-950"
-                  role="alert"
-                >
-                  <p className="font-semibold">Server validation errors</p>
-                  <ul className="mt-2 space-y-1">
-                    {Object.entries(validationErrors).flatMap(([field, messages]) =>
-                      messages.map((message) => (
-                        <li key={`${field}-${message}`}>
-                          <span className="font-semibold">
-                            {humanizeCode(field) ?? field}:
-                          </span>{" "}
-                          {message}
-                        </li>
-                      )),
-                    )}
-                  </ul>
-                </div>
-              ) : null}
-
-              {createRun.error instanceof Error && createApiError?.status !== 400 ? (
+            {selectedAssets.length === 0 ? (
+              <div className="mt-4">
                 <StatePanel
-                  title={transportErrorTitle(createRun.error)}
-                  message={createRun.error.message}
-                  tone="error"
+                  title="No assets selected"
+                  message={
+                    sourceMode === "AD_HOC"
+                      ? "Add canonical stock/ETF symbols to build a hypothetical optimization universe."
+                      : "Select a portfolio and import its current eligible holdings."
+                  }
                 />
-              ) : null}
-
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="submit"
-                  disabled={createRun.isPending}
-                  className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white outline-none transition hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {createRun.isPending ? "Creating run…" : "Run optimization"}
-                </button>
-                <span className="text-xs text-slate-500">
-                  Risk-free-rate behavior remains backend-authoritative; this form
-                  does not submit a frontend assumption.
-                </span>
-              </div>
-            </form>
-          </section>
-
-          <div className="mt-5 space-y-5">
-            {runsQuery.error instanceof Error ? (
-              <div
-                className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
-                role="status"
-              >
-                Persisted run history could not refresh. New optimization runs can
-                still be created; comparison history may be incomplete.
               </div>
             ) : null}
 
-            {runsQuery.data && runsQuery.data.length > 0 ? (
-              <section
-                className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
-                aria-labelledby="recent-optimization-runs-heading"
-              >
-                <h2
-                  id="recent-optimization-runs-heading"
-                  className="text-lg font-semibold text-slate-950"
-                >
-                  Recent persisted runs
+            {formError ? (
+              <p className="mt-4 text-sm font-medium text-rose-700" role="alert">
+                {formError}
+              </p>
+            ) : null}
+
+            <button
+              type="submit"
+              disabled={createRun.isPending || selectedAssets.length === 0}
+              className="mt-5 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white outline-none hover:bg-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50"
+            >
+              {createRun.isPending ? "Running optimization…" : "Run optimization"}
+            </button>
+          </section>
+        </form>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <h2 className="text-lg font-semibold text-slate-950">Methodology</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            These canonical analytical rules are intentionally read-only.
+          </p>
+          <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <dt className="text-xs text-slate-500">Historical price field</dt>
+              <dd className="mt-1 font-semibold text-slate-900">adjusted_close</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Annualization factor</dt>
+              <dd className="mt-1 font-semibold text-slate-900">252</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Expected returns</dt>
+              <dd className="mt-1 font-semibold text-slate-900">
+                Mean daily simple return × 252
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Covariance</dt>
+              <dd className="mt-1 font-semibold text-slate-900">
+                Complete-case sample covariance, ddof=1 × 252
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Position policy</dt>
+              <dd className="mt-1 font-semibold text-slate-900">
+                Long-only · unlevered · fully invested
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Provider</dt>
+              <dd className="mt-1 font-semibold text-slate-900">
+                {activeRun?.provenance.provider ?? "Server-configured at execution"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Engine version</dt>
+              <dd className="mt-1 font-semibold text-slate-900">
+                {activeRun?.provenance.engine_version ?? "Recorded on every run"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Method version</dt>
+              <dd className="mt-1 font-semibold text-slate-900">
+                {activeRun?.provenance.method_version ?? "Recorded on every run"}
+              </dd>
+            </div>
+          </dl>
+        </section>
+
+        {createRun.error instanceof Error ? (
+          <StatePanel
+            title={errorTitle(createRun.error)}
+            message={createRun.error.message}
+            tone="error"
+          />
+        ) : null}
+
+        {activeRun ? (
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
+                  Persisted run
+                </p>
+                <h2 className="mt-1 text-lg font-semibold text-slate-950">
+                  {METHOD_OPTIONS.find((item) => item.value === activeRun.method)?.label ??
+                    activeRun.method}
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Inspect a prior owner-scoped run and its stored assumptions,
-                  diagnostics, and provenance.
+                  {runSourceLabel(activeRun)}
                 </p>
-                <ul className="mt-4 space-y-2">
-                  {runsQuery.data.slice(0, 5).map((run) => {
-                    const presentation = statusPresentation(run.status);
-                    return (
-                      <li
-                        key={run.id}
-                        className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 px-4 py-3"
-                      >
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-semibold text-slate-950">
-                              {methodLabel(run.method)}
-                            </span>
-                            <span
-                              className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${presentation.className}`}
-                            >
-                              {presentation.label}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {run.provenance.period_start} to{" "}
-                            {run.provenance.period_end_exclusive} · {run.id}
-                          </p>
-                        </div>
+              </div>
+              <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold">
+                {statusLabel(activeRun.status)}
+              </span>
+            </div>
+
+            {activeRun.status === "FAILED" ? (
+              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
+                <strong>{activeRun.failure_code || "OPTIMIZATION_FAILED"}</strong>
+                <p className="mt-1">{activeRun.failure_message || "Optimization failed."}</p>
+              </div>
+            ) : null}
+
+            {activeRun.status === "PENDING" || activeRun.status === "RUNNING" ? (
+              <p className="mt-4 text-sm text-slate-600" role="status">
+                The persisted run is {activeRun.status.toLowerCase()}. This page will poll the
+                run resource until it reaches a terminal state.
+              </p>
+            ) : null}
+
+            {activeRun.status === "SUCCEEDED" && activeRun.result?.portfolio ? (
+              <dl className="mt-5 grid gap-4 sm:grid-cols-3">
+                <div>
+                  <dt className="text-xs text-slate-500">Expected annual return</dt>
+                  <dd className="mt-1 text-lg font-semibold tabular-nums">
+                    {formatPercent(activeRun.result.portfolio.expected_return)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">Expected annual volatility</dt>
+                  <dd className="mt-1 text-lg font-semibold tabular-nums">
+                    {formatPercent(activeRun.result.portfolio.expected_volatility)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">Sharpe ratio</dt>
+                  <dd className="mt-1 text-lg font-semibold tabular-nums">
+                    {formatRatio(activeRun.result.portfolio.sharpe_ratio)}
+                  </dd>
+                </div>
+              </dl>
+            ) : null}
+
+            <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <dt className="text-xs text-slate-500">Period</dt>
+                <dd className="mt-1 font-medium">
+                  {activeRun.provenance.period_start} to{" "}
+                  {activeRun.provenance.period_end_exclusive} (end exclusive)
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">Risk-free rate</dt>
+                <dd className="mt-1 font-medium tabular-nums">
+                  {formatPercent(activeRun.provenance.risk_free_rate_annual)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">Price field</dt>
+                <dd className="mt-1 font-medium">{activeRun.provenance.price_field}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">Data fingerprint</dt>
+                <dd className="mt-1 break-all font-mono text-xs">
+                  {activeRun.provenance.data_fingerprint || "Not available"}
+                </dd>
+              </div>
+            </dl>
+
+            {activeRun.warnings.length > 0 ? (
+              <ul className="mt-4 space-y-1 text-sm text-amber-900">
+                {activeRun.warnings.map((warning) => (
+                  <li key={`${warning.code}-${warning.message}`}>
+                    <strong>{warning.code}</strong>: {warning.message}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
+        ) : null}
+
+        {selectedAssets.length > 0 ? (
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <h2 className="text-lg font-semibold text-slate-950">
+              Allocation comparison
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Optimized columns appear only when a matching successful persisted run exists.
+            </p>
+            <div className="mt-4">
+              <AllocationComparisonChart
+                rows={comparisonRows}
+                baselineLabel={
+                  sourceMode === "AD_HOC" ? "Custom baseline" : "Current observed"
+                }
+              />
+            </div>
+          </section>
+        ) : null}
+
+        {(frontierRun?.result?.frontier.length ?? 0) > 0 ? (
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <h2 className="text-lg font-semibold text-slate-950">Efficient frontier</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Every plotted point is returned by the server. No interpolation is performed.
+            </p>
+            <div className="mt-4">
+              <EfficientFrontierChart
+                points={frontierRun!.result!.frontier}
+                assetLabels={assetLabels}
+              />
+            </div>
+          </section>
+        ) : null}
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <h2 className="text-lg font-semibold text-slate-950">Run history</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Previous ad hoc and portfolio-derived runs remain immutable and auditable.
+          </p>
+
+          {runsQuery.isPending ? (
+            <Skeleton className="mt-4 h-32 w-full" />
+          ) : runsQuery.error instanceof Error ? (
+            <div className="mt-4">
+              <StatePanel
+                title="Optimization run history could not load"
+                message={runsQuery.error.message}
+                tone="error"
+              />
+            </div>
+          ) : (runsQuery.data ?? []).length === 0 ? (
+            <p className="mt-4 text-sm text-slate-500">No persisted optimization runs yet.</p>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-xs text-slate-500">
+                    <th className="py-2 pr-4 font-semibold">Source</th>
+                    <th className="py-2 pr-4 font-semibold">Method</th>
+                    <th className="py-2 pr-4 font-semibold">Period</th>
+                    <th className="py-2 pr-4 font-semibold">Status</th>
+                    <th className="py-2 font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(runsQuery.data ?? []).slice(0, 20).map((run) => (
+                    <tr key={run.id} className="border-b border-slate-100">
+                      <td className="py-2 pr-4">{runSourceLabel(run)}</td>
+                      <td className="py-2 pr-4">{run.method}</td>
+                      <td className="py-2 pr-4">
+                        {run.provenance.period_start} → {run.provenance.period_end_exclusive}
+                      </td>
+                      <td className="py-2 pr-4">{statusLabel(run.status)}</td>
+                      <td className="py-2">
                         <button
                           type="button"
                           onClick={() => setActiveRunId(run.id)}
-                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                          className="font-semibold text-blue-700 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                         >
                           Inspect run
-                          <span className="sr-only"> {run.id}</span>
                         </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            ) : null}
-
-            {activeRunQuery.error instanceof Error && activeRun === null ? (
-              <StatePanel
-                title={transportErrorTitle(activeRunQuery.error)}
-                message={activeRunQuery.error.message}
-                tone="error"
-                action={
-                  <button
-                    type="button"
-                    onClick={() => void activeRunQuery.refetch()}
-                    className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                  >
-                    Retry run lookup
-                  </button>
-                }
-              />
-            ) : null}
-
-            {activeRun ? <RunStatusPanel run={activeRun} /> : null}
-            {activeRun ? (
-              <SuccessfulRunResult run={activeRun} assetLabels={assetLabels} />
-            ) : null}
-
-            <section
-              className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
-              aria-labelledby="allocation-comparison-heading"
-            >
-              <h2
-                id="allocation-comparison-heading"
-                className="text-lg font-semibold text-slate-950"
-              >
-                Allocation comparison
-              </h2>
-              <p className="mt-1 text-sm leading-6 text-slate-500">
-                Current weights come from the authoritative dashboard holdings
-                snapshot and are not renormalized when cash or excluded holdings
-                exist. Optimized columns appear only for matching successful
-                persisted runs using this period, asset universe, and bounds.
-              </p>
-
-              <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-slate-700">
-                  Current observed
-                </span>
-                <span
-                  className={`rounded-full border px-2.5 py-1 ${
-                    equalWeightRun
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                      : "border-slate-200 bg-slate-50 text-slate-500"
-                  }`}
-                >
-                  Equal weight {equalWeightRun ? "available" : "not run"}
-                </span>
-                <span
-                  className={`rounded-full border px-2.5 py-1 ${
-                    minimumVarianceRun
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                      : "border-slate-200 bg-slate-50 text-slate-500"
-                  }`}
-                >
-                  Minimum variance {minimumVarianceRun ? "available" : "not run"}
-                </span>
-                <span
-                  className={`rounded-full border px-2.5 py-1 ${
-                    maximumSharpeRun
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                      : "border-slate-200 bg-slate-50 text-slate-500"
-                  }`}
-                >
-                  Maximum Sharpe {maximumSharpeRun ? "available" : "not run"}
-                </span>
-              </div>
-
-              <div className="mt-5">
-                <AllocationComparisonChart rows={comparisonRows} />
-              </div>
-            </section>
-
-            {frontierPointsForContext.length > 0 && frontierRun ? (
-              <section
-                className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
-                aria-labelledby="efficient-frontier-heading"
-              >
-                <h2
-                  id="efficient-frontier-heading"
-                  className="text-lg font-semibold text-slate-950"
-                >
-                  Efficient frontier
-                </h2>
-                <p className="mt-1 text-sm leading-6 text-slate-500">
-                  Expected annual volatility is plotted against expected annual
-                  return using exactly the points returned by persisted run
-                  {" "}{frontierRun.id}. The browser does not interpolate the frontier.
-                </p>
-                <div className="mt-4">
-                  <EfficientFrontierChart
-                    points={frontierPointsForContext}
-                    assetLabels={assetLabels}
-                  />
-                </div>
-              </section>
-            ) : (
-              <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5 sm:p-6">
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Efficient frontier not generated yet
-                </h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  Select Efficient frontier and create a matching persisted run to
-                  populate this section.
-                </p>
-              </section>
-            )}
-
-            {activeRun ? <RunProvenance run={activeRun} /> : null}
-          </div>
-        </>
-      )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
     </DashboardShell>
   );
 }

@@ -1,12 +1,12 @@
 import {
-    QueryClient,
-    QueryClientProvider,
+  QueryClient,
+  QueryClientProvider,
 } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import {
-    MemoryRouter,
-    Route,
-    Routes,
+  MemoryRouter,
+  Route,
+  Routes,
 } from "react-router";
 
 import { AUTH_SESSION_QUERY_KEY } from "../hooks/useAuth";
@@ -130,7 +130,7 @@ describe(
         }),
       ).toHaveAttribute(
         "href",
-        `/portfolios/${PORTFOLIO_ID}/allocation-lab?range=6M`,
+        `/allocation-lab?portfolio=${PORTFOLIO_ID}&range=6M`,
       );
     });
   },

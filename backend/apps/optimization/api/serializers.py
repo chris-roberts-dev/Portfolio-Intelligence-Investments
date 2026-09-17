@@ -11,10 +11,12 @@ from rest_framework import serializers
 from apps.optimization.models import (
     OptimizationRun,
     OptimizationRunMethod,
+    OptimizationRunSource,
     OptimizationRunStatus,
 )
 from apps.optimization.services import (
     AssetWeightBounds,
+    BaselineWeight,
     CreateOptimizationRunCommand,
 )
 
@@ -38,10 +40,26 @@ class OptimizationWeightBoundSerializer(serializers.Serializer[object]):
         return attrs
 
 
-class OptimizationRunCreateRequestSerializer(serializers.Serializer[object]):
-    """Request contract for one synchronous persisted optimization run."""
+class OptimizationBaselineWeightSerializer(serializers.Serializer[object]):
+    """One optional reference-allocation weight for comparison only."""
 
-    portfolio_id = serializers.UUIDField()
+    asset_id = serializers.UUIDField()
+    weight = serializers.FloatField(min_value=0.0, max_value=1.0)
+
+    def validate_weight(self, value: float) -> float:
+        if not math.isfinite(value):
+            raise serializers.ValidationError("Baseline weight must be finite.")
+        return value
+
+
+class OptimizationRunCreateRequestSerializer(serializers.Serializer[object]):
+    """Request contract for one portfolio-derived or ad hoc persisted run."""
+
+    source_type = serializers.ChoiceField(
+        choices=OptimizationRunSource.choices,
+        default=OptimizationRunSource.PORTFOLIO,
+    )
+    portfolio_id = serializers.UUIDField(required=False, allow_null=True)
     method = serializers.ChoiceField(choices=OptimizationRunMethod.choices)
     start = serializers.DateField()
     end = serializers.DateField()
@@ -52,6 +70,10 @@ class OptimizationRunCreateRequestSerializer(serializers.Serializer[object]):
         max_length=50,
     )
     bounds = OptimizationWeightBoundSerializer(
+        many=True,
+        required=False,
+    )
+    baseline_weights = OptimizationBaselineWeightSerializer(
         many=True,
         required=False,
     )
@@ -67,13 +89,31 @@ class OptimizationRunCreateRequestSerializer(serializers.Serializer[object]):
         if attrs["end"] <= attrs["start"]:
             raise serializers.ValidationError({"end": "end must be later than start."})
 
+        source_type = OptimizationRunSource(cast(str, attrs["source_type"]))
+        portfolio_id = cast(UUID | None, attrs.get("portfolio_id"))
+        raw_asset_ids = cast(list[UUID] | None, attrs.get("asset_ids"))
+
+        if source_type is OptimizationRunSource.PORTFOLIO and portfolio_id is None:
+            raise serializers.ValidationError(
+                {"portfolio_id": "portfolio_id is required for PORTFOLIO runs."}
+            )
+        if source_type is OptimizationRunSource.AD_HOC:
+            if portfolio_id is not None:
+                raise serializers.ValidationError(
+                    {"portfolio_id": "portfolio_id must be null/omitted for AD_HOC runs."}
+                )
+            if not raw_asset_ids:
+                raise serializers.ValidationError(
+                    {"asset_ids": "AD_HOC runs require an explicit non-empty asset_ids universe."}
+                )
+
         risk_free_rate = float(attrs["risk_free_rate_annual"])
         if not math.isfinite(risk_free_rate):
             raise serializers.ValidationError(
                 {"risk_free_rate_annual": "risk_free_rate_annual must be finite."}
             )
 
-        asset_ids = tuple(cast(list[UUID], attrs.get("asset_ids", [])))
+        asset_ids = tuple(raw_asset_ids or [])
         if len(set(asset_ids)) != len(asset_ids):
             raise serializers.ValidationError({"asset_ids": "asset_ids must be unique."})
 
@@ -87,6 +127,22 @@ class OptimizationRunCreateRequestSerializer(serializers.Serializer[object]):
             raise serializers.ValidationError(
                 {"bounds": "Bound assets must be included in asset_ids when asset_ids is supplied."}
             )
+
+        raw_baseline = cast(list[dict[str, Any]], attrs.get("baseline_weights", []))
+        baseline_asset_ids = tuple(cast(UUID, item["asset_id"]) for item in raw_baseline)
+        if len(set(baseline_asset_ids)) != len(baseline_asset_ids):
+            raise serializers.ValidationError(
+                {"baseline_weights": "Each asset may appear in baseline_weights at most once."}
+            )
+        if raw_baseline and asset_ids and set(baseline_asset_ids) != set(asset_ids):
+            raise serializers.ValidationError(
+                {
+                    "baseline_weights": (
+                        "A supplied baseline must include exactly every submitted asset."
+                    )
+                }
+            )
+
         return attrs
 
     def to_command(self) -> CreateOptimizationRunCommand:
@@ -94,8 +150,11 @@ class OptimizationRunCreateRequestSerializer(serializers.Serializer[object]):
         data = cast(dict[str, Any], self.validated_data)
         raw_asset_ids = cast(list[UUID] | None, data.get("asset_ids"))
         raw_bounds = cast(list[dict[str, Any]], data.get("bounds", []))
+        raw_baseline = cast(list[dict[str, Any]], data.get("baseline_weights", []))
+
         return CreateOptimizationRunCommand(
-            portfolio_id=cast(UUID, data["portfolio_id"]),
+            source_type=OptimizationRunSource(cast(str, data["source_type"])),
+            portfolio_id=cast(UUID | None, data.get("portfolio_id")),
             method=OptimizationRunMethod(cast(str, data["method"])),
             period_start=data["start"],
             period_end=data["end"],
@@ -107,6 +166,13 @@ class OptimizationRunCreateRequestSerializer(serializers.Serializer[object]):
                     maximum=float(bound["maximum"]),
                 )
                 for bound in raw_bounds
+            ),
+            baseline_weights=tuple(
+                BaselineWeight(
+                    asset_id=cast(UUID, item["asset_id"]),
+                    weight=float(item["weight"]),
+                )
+                for item in raw_baseline
             ),
             risk_free_rate_annual=float(data["risk_free_rate_annual"]),
             frontier_points=int(data["frontier_points"]),
@@ -155,10 +221,20 @@ class OptimizationRunSerializer(serializers.Serializer[OptimizationRun]):
     """Public persisted optimization-run response schema."""
 
     id = serializers.UUIDField(read_only=True)
-    portfolio_id = serializers.UUIDField(read_only=True)
+    source_type = serializers.ChoiceField(
+        choices=OptimizationRunSource.choices,
+        read_only=True,
+    )
+    portfolio_id = serializers.UUIDField(read_only=True, allow_null=True)
+    portfolio_name = serializers.CharField(
+        source="portfolio.name",
+        read_only=True,
+        allow_null=True,
+    )
     status = serializers.ChoiceField(choices=OptimizationRunStatus.choices, read_only=True)
     method = serializers.ChoiceField(choices=OptimizationRunMethod.choices, read_only=True)
     included_asset_ids = serializers.ListField(child=serializers.UUIDField(), read_only=True)
+    baseline_weights = OptimizationBaselineWeightSerializer(many=True, read_only=True)
     parameters = serializers.JSONField(read_only=True)
     result = OptimizationResultSerializer(allow_null=True, read_only=True)
     warnings = OptimizationRunWarningSerializer(many=True, read_only=True)

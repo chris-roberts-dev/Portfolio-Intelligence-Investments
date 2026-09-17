@@ -75,6 +75,93 @@ class AssetDiscoveryDiagnostic:
     warning: str
 
 
+class CanonicalAssetResolutionStatus(StrEnum):
+    """Public resolution outcome for a user-entered symbol."""
+
+    RESOLVED = "RESOLVED"
+    NOT_FOUND = "NOT_FOUND"
+    FAILED = "FAILED"
+
+
+@dataclass(frozen=True, slots=True)
+class CanonicalAssetResolutionOutcome:
+    """One ordered canonical asset-resolution/discovery outcome."""
+
+    symbol: str
+    status: CanonicalAssetResolutionStatus
+    asset_id: UUID | None
+    warning: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CanonicalAssetResolutionBatch:
+    """Ordered resolution batch used by authenticated application APIs."""
+
+    provider: str
+    outcomes: tuple[CanonicalAssetResolutionOutcome, ...]
+
+
+def resolve_canonical_assets_with_discovery(
+    symbols: Sequence[str],
+    *,
+    provider_name: str,
+    resolver: AssetResolver,
+    discovery_provider: AssetDiscoveryProvider | None,
+    catalog_writer: AssetCatalogWriter | None,
+) -> CanonicalAssetResolutionBatch:
+    """Resolve known assets and discover only unresolved supported symbols."""
+    normalized_provider = provider_name.strip().lower()
+    if not normalized_provider:
+        raise ValueError("provider_name must not be blank.")
+
+    initial = resolver.resolve(symbols, provider=normalized_provider)
+    ordered_symbols = tuple(outcome.requested_symbol.symbol for outcome in initial.outcomes)
+    diagnostics = _discover_and_persist_unresolved_assets(
+        ordered_symbols,
+        provider_name=normalized_provider,
+        resolver=resolver,
+        discovery_provider=discovery_provider,
+        catalog_writer=catalog_writer,
+    )
+    final = resolver.resolve(ordered_symbols, provider=normalized_provider)
+    resolved_by_symbol = {
+        outcome.requested_symbol.symbol: outcome.asset_id for outcome in final.resolved
+    }
+
+    outcomes: list[CanonicalAssetResolutionOutcome] = []
+    for symbol in ordered_symbols:
+        asset_id = resolved_by_symbol.get(symbol)
+        if asset_id is not None:
+            outcomes.append(
+                CanonicalAssetResolutionOutcome(
+                    symbol=symbol,
+                    status=CanonicalAssetResolutionStatus.RESOLVED,
+                    asset_id=asset_id,
+                )
+            )
+            continue
+
+        diagnostic = diagnostics.get(symbol)
+        if diagnostic is None or diagnostic.status is MarketBarStatus.NOT_FOUND:
+            status = CanonicalAssetResolutionStatus.NOT_FOUND
+        else:
+            status = CanonicalAssetResolutionStatus.FAILED
+
+        outcomes.append(
+            CanonicalAssetResolutionOutcome(
+                symbol=symbol,
+                status=status,
+                asset_id=None,
+                warning=(diagnostic.warning if diagnostic is not None else None),
+            )
+        )
+
+    return CanonicalAssetResolutionBatch(
+        provider=normalized_provider,
+        outcomes=tuple(outcomes),
+    )
+
+
 def execute_market_bar_query_with_discovery(
     query: NormalizedMarketBarQuery,
     *,

@@ -47,6 +47,11 @@ export function App() {
         />
 
         <Route
+          path="/allocation-lab"
+          element={<AllocationLabPage />}
+        />
+
+        <Route
           path="/portfolios/:portfolioId/allocation-lab"
           element={<AllocationLabPage />}
         />

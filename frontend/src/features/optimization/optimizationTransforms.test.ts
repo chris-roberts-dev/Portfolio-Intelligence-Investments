@@ -1,23 +1,29 @@
 import type { OptimizationRun } from "../../types/optimization";
 import {
   latestSuccessfulOptimizationRun,
-  optimizedWeightForAsset,
   optimizationRunMatchesContext,
+  optimizedWeightForAsset,
 } from "./optimizationTransforms";
 
 function run(overrides: Partial<OptimizationRun> = {}): OptimizationRun {
   return {
     id: "run-1",
-    portfolio_id: "portfolio-1",
+    source_type: "AD_HOC",
+    portfolio_id: null,
+    portfolio_name: null,
     status: "SUCCEEDED",
     method: "MINIMUM_VARIANCE",
     included_asset_ids: ["asset-a", "asset-b"],
+    baseline_weights: [],
     parameters: {
+      source_type: "AD_HOC",
       requested_asset_ids: ["asset-a", "asset-b"],
       bounds: [
         { asset_id: "asset-a", minimum: 0, maximum: 1 },
         { asset_id: "asset-b", minimum: 0, maximum: 1 },
       ],
+      baseline_weights: [],
+      risk_free_rate_annual: 0.03,
       frontier_points: 25,
       observations: 100,
       covariance_rank: 2,
@@ -48,9 +54,9 @@ function run(overrides: Partial<OptimizationRun> = {}): OptimizationRun {
       provider: "yfinance",
       price_field: "adjusted_close",
       annualization_factor: 252,
-      risk_free_rate_annual: 0,
+      risk_free_rate_annual: 0.03,
       benchmark_asset_id: null,
-      engine_version: "0.1.0",
+      engine_version: "0.2.0",
       method_version: "1.0",
       data_retrieved_at: "2026-09-17T10:00:01Z",
       data_fingerprint: "abc",
@@ -60,6 +66,8 @@ function run(overrides: Partial<OptimizationRun> = {}): OptimizationRun {
 }
 
 const context = {
+  sourceType: "AD_HOC" as const,
+  portfolioId: null,
   start: "2026-03-17",
   end: "2026-09-17",
   assetIds: ["asset-a", "asset-b"],
@@ -67,10 +75,11 @@ const context = {
     { asset_id: "asset-a", minimum: 0, maximum: 1 },
     { asset_id: "asset-b", minimum: 0, maximum: 1 },
   ],
+  riskFreeRateAnnual: 0.03,
 };
 
 describe("optimization presentation transforms", () => {
-  it("matches persisted runs only when period, ordered asset universe, and bounds match", () => {
+  it("matches only identical source, period, asset universe, bounds, and risk-free rate", () => {
     expect(optimizationRunMatchesContext(run(), context)).toBe(true);
     expect(
       optimizationRunMatchesContext(
@@ -80,10 +89,16 @@ describe("optimization presentation transforms", () => {
     ).toBe(false);
     expect(
       optimizationRunMatchesContext(
+        run({ source_type: "PORTFOLIO", portfolio_id: "portfolio-1" }),
+        context,
+      ),
+    ).toBe(false);
+    expect(
+      optimizationRunMatchesContext(
         run({
           provenance: {
             ...run().provenance,
-            period_start: "2026-01-01",
+            risk_free_rate_annual: 0,
           },
         }),
         context,
