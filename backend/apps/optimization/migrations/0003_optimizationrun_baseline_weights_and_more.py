@@ -5,26 +5,35 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('optimization', '0002_alter_optimizationrun_warnings'),
-        ('portfolios', '0001_initial'),
+        ("optimization", "0002_alter_optimizationrun_warnings"),
+        ("portfolios", "0001_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='optimizationrun',
-            name='baseline_weights',
+            model_name="optimizationrun",
+            name="baseline_weights",
             field=models.JSONField(blank=True, default=list),
         ),
         migrations.AddField(
-            model_name='optimizationrun',
-            name='source_type',
-            field=models.CharField(choices=[('PORTFOLIO', 'Portfolio'), ('AD_HOC', 'Ad hoc')], default='PORTFOLIO', max_length=16),
+            model_name="optimizationrun",
+            name="source_type",
+            field=models.CharField(
+                choices=[("PORTFOLIO", "Portfolio"), ("AD_HOC", "Ad hoc")],
+                default="PORTFOLIO",
+                max_length=16,
+            ),
         ),
         migrations.AlterField(
-            model_name='optimizationrun',
-            name='portfolio',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='optimization_runs', to='portfolios.portfolio'),
+            model_name="optimizationrun",
+            name="portfolio",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="optimization_runs",
+                to="portfolios.portfolio",
+            ),
         ),
     ]
