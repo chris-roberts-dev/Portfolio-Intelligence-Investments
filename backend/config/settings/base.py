@@ -31,6 +31,7 @@ PLATFORM_APPS = [
     "apps.portfolios.apps.PortfoliosConfig",
     "apps.analytics.apps.AnalyticsConfig",
     "apps.optimization.apps.OptimizationConfig",
+    "apps.rebalancing.apps.RebalancingConfig",
     "apps.backtesting.apps.BacktestingConfig",
 ]
 
@@ -144,5 +145,6 @@ SPECTACULAR_SETTINGS = {
         ),
         "OptimizationRunMethodEnum": "apps.optimization.models.OptimizationRunMethod",
         "OptimizationRunStatusEnum": "apps.optimization.models.OptimizationRunStatus",
+        "RebalanceScheduleEnum": "portfolio_engine.rebalancing.contracts.RebalanceSchedule",
     },
 }

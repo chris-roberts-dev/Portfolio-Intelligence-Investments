@@ -1242,6 +1242,95 @@ paths:
               schema:
                 $ref: '#/components/schemas/PortfolioApiError'
           description: The portfolio does not exist in the authenticated user's scope.
+  /api/v1/rebalance-simulations/:
+    get:
+      operationId: rebalance_simulation_list
+      tags:
+      - rebalancing
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RebalanceSimulation'
+          description: ''
+    post:
+      operationId: rebalance_simulation_create
+      tags:
+      - rebalancing
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RebalanceSimulationCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RebalanceSimulationCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RebalanceSimulationCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebalanceSimulation'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebalancingValidationError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebalancingApiError'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebalancingApiError'
+          description: ''
+  /api/v1/rebalance-simulations/{simulation_id}/:
+    get:
+      operationId: rebalance_simulation_detail
+      parameters:
+      - in: path
+        name: simulation_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - rebalancing
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebalanceSimulation'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebalancingApiError'
+          description: ''
   /api/v1/schema/:
     get:
       operationId: schema_retrieve
@@ -1387,6 +1476,89 @@ paths:
               schema:
                 type: object
                 additionalProperties: {}
+          description: ''
+  /api/v1/target-allocations/:
+    get:
+      operationId: target_allocation_list
+      tags:
+      - rebalancing
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TargetAllocation'
+          description: ''
+    post:
+      operationId: target_allocation_create
+      tags:
+      - rebalancing
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TargetAllocationCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TargetAllocationCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TargetAllocationCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetAllocation'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebalancingValidationError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebalancingApiError'
+          description: ''
+  /api/v1/target-allocations/{target_id}/:
+    get:
+      operationId: target_allocation_detail
+      parameters:
+      - in: path
+        name: target_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - rebalancing
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetAllocation'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebalancingApiError'
           description: ''
 components:
   schemas:
@@ -4412,6 +4584,129 @@ components:
       - source
       - trade_date
       - volume
+    RebalanceScheduleEnum:
+      enum:
+      - MONTHLY
+      - QUARTERLY
+      - ANNUAL
+      type: string
+      description: |-
+        * `MONTHLY` - MONTHLY
+        * `QUARTERLY` - QUARTERLY
+        * `ANNUAL` - ANNUAL
+    RebalanceSimulation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        portfolio_id:
+          type: string
+          format: uuid
+          readOnly: true
+        target_allocation_id:
+          type: string
+          format: uuid
+          readOnly: true
+        as_of:
+          type: string
+          format: date-time
+          readOnly: true
+        provider:
+          type: string
+          readOnly: true
+        price_field:
+          type: string
+          readOnly: true
+        valuation_retrieved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        drift_threshold:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        schedule:
+          type: string
+          readOnly: true
+        previous_rebalance_date:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        result:
+          readOnly: true
+        warnings:
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - as_of
+      - created_at
+      - drift_threshold
+      - id
+      - portfolio_id
+      - previous_rebalance_date
+      - price_field
+      - provider
+      - result
+      - schedule
+      - target_allocation_id
+      - valuation_retrieved_at
+      - warnings
+    RebalanceSimulationCreateRequest:
+      type: object
+      properties:
+        portfolio_id:
+          type: string
+          format: uuid
+        target_allocation_id:
+          type: string
+          format: uuid
+        drift_threshold:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+        schedule:
+          $ref: '#/components/schemas/RebalanceScheduleEnum'
+        previous_rebalance_date:
+          type: string
+          format: date
+          nullable: true
+      required:
+      - portfolio_id
+      - target_allocation_id
+    RebalancingApiError:
+      type: object
+      properties:
+        code:
+          type: string
+          readOnly: true
+        detail:
+          type: string
+          readOnly: true
+      required:
+      - code
+      - detail
+    RebalancingValidationError:
+      type: object
+      properties:
+        code:
+          type: string
+          readOnly: true
+        errors:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+      required:
+      - code
+      - errors
     ResourceEnum:
       enum:
       - HOLDINGS
@@ -4553,6 +4848,100 @@ components:
         * `CURRENT_VALUATION` - CURRENT_VALUATION
         * `DAILY_PERFORMANCE` - DAILY_PERFORMANCE
         * `ANALYTICS` - ANALYTICS
+    TargetAllocation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        portfolio_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        source_optimization_run_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        weights:
+          type: array
+          items:
+            $ref: '#/components/schemas/TargetAllocationWeight'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - name
+      - portfolio_id
+      - source_optimization_run_id
+      - updated_at
+      - weights
+    TargetAllocationCreateRequest:
+      type: object
+      properties:
+        portfolio_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 255
+        weights:
+          type: array
+          items:
+            $ref: '#/components/schemas/TargetWeightRequest'
+        source_optimization_run_id:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+      - name
+      - portfolio_id
+      - weights
+    TargetAllocationWeight:
+      type: object
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        is_cash:
+          type: boolean
+          readOnly: true
+        weight:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - asset_id
+      - is_cash
+      - weight
+    TargetWeightRequest:
+      type: object
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+          nullable: true
+        weight:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+      required:
+      - weight
     TransactionImportError:
       type: object
       description: Stable CSV request/file/confirm validation response envelope.
