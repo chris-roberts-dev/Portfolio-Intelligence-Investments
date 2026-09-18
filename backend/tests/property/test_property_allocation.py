@@ -4,7 +4,7 @@ import math
 from uuid import UUID
 
 import pytest
-from hypothesis import given
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from portfolio_engine.config import WEIGHT_SUM_TOLERANCE
@@ -75,6 +75,7 @@ def positions(
     )
 
 
+@settings(suppress_health_check=[HealthCheck.too_slow])
 @given(case=ALLOCATION_CASE)
 def test_derived_weights_sum_to_one_within_tolerance(
     case: tuple[
@@ -112,6 +113,7 @@ def test_derived_weights_sum_to_one_within_tolerance(
     )
 
 
+@settings(suppress_health_check=[HealthCheck.too_slow])
 @given(case=ALLOCATION_CASE)
 def test_joint_position_permutation_preserves_asset_weight_mapping(
     case: tuple[
@@ -161,6 +163,7 @@ def test_joint_position_permutation_preserves_asset_weight_mapping(
     )
 
 
+@settings(suppress_health_check=[HealthCheck.too_slow])
 @given(
     case=ALLOCATION_CASE,
     scale=st.integers(

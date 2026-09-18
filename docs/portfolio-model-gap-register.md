@@ -32,9 +32,9 @@ The R file contains reusable models, research examples, test strategies, plottin
 
 ## 3. Executive Finding
 
-The current Python project implements a strong analytical foundation, including returns, volatility, Sharpe, Sortino, maximum drawdown, beta, correlation, HHI concentration, valuation, current allocation, and one-period prior-weight portfolio returns.
+The current Python project now extends its analytical foundation through the canonical Phase 5 optimization and rebalancing layers. Target-allocation validation, current drift/notional simulation, schedule and threshold rules, and deterministic historical annual/quarterly/threshold rebalancing comparisons are implemented with explicit costs, turnover, event history, provenance, and anti-look-ahead timing.
 
-It does **not** yet implement a portfolio optimizer, target-allocation generator, rebalancing engine, or historical strategy backtester. The Django `optimization` and `backtesting` applications currently contain configuration scaffolding only. Consequently, nearly every allocation model and backtest strategy in the R source remains outstanding.
+The generic historical strategy backtester is still absent: `apps/backtesting` remains scaffolding, and buy-and-hold, moving-average, momentum, benchmark-comparison, and broader SIT strategy infrastructure remain outstanding. Advanced SIT allocation/risk models also remain outside this Phase 5 batch unless already covered elsewhere in the current project.
 
 ## 4. Existing Coverage
 
@@ -78,11 +78,11 @@ These capabilities are already required by the current development guide and sho
 | OPT-008 | [ ] | P0 | Efficient frontier | `ef.portfolio` | `portfolio_engine/optimization/efficient_frontier.py` |
 | OPT-009 | [ ] | P1 | Target-return optimization | `target.return.portfolio` | `portfolio_engine/optimization/target_return.py` |
 | OPT-010 | [ ] | P1 | Target-risk optimization | `target.risk.portfolio` | `portfolio_engine/optimization/target_risk.py` |
-| REB-001 | [ ] | P0 | Target-allocation validation | R constraint and allocation helpers | `portfolio_engine/rebalancing/contracts.py` |
-| REB-002 | [ ] | P0 | Absolute and relative drift calculation | `compute.max.deviation` | `portfolio_engine/rebalancing/drift.py` |
-| REB-003 | [ ] | P0 | Simulated rebalance notionals | Share allocation helpers | `portfolio_engine/rebalancing/trades.py` |
-| REB-004 | [ ] | P0 | Monthly, quarterly, and annual schedules | `bt.rebalancing.test` | `portfolio_engine/rebalancing/schedules.py` |
-| REB-005 | [ ] | P0 | Drift-threshold rebalancing | `bt.max.deviation.rebalancing` | `portfolio_engine/rebalancing/thresholds.py` |
+| REB-001 | [x] | P0 | Target-allocation validation | R constraint and allocation helpers | `portfolio_engine/rebalancing/core.py` |
+| REB-002 | [x] | P0 | Absolute and relative drift calculation | `compute.max.deviation` | `portfolio_engine/rebalancing/core.py` |
+| REB-003 | [x] | P0 | Simulated rebalance notionals | Share allocation helpers | `portfolio_engine/rebalancing/core.py` |
+| REB-004 | [x] | P0 | Monthly, quarterly, and annual schedules | `bt.rebalancing.test` | `portfolio_engine/rebalancing/rules.py`, `historical.py` |
+| REB-005 | [x] | P0 | Drift-threshold rebalancing | `bt.max.deviation.rebalancing` | `portfolio_engine/rebalancing/rules.py`, `historical.py` |
 | BT-001 | [ ] | P0 | Deterministic backtest state machine | `bt.run`, `bt.run.share` | `portfolio_engine/backtesting/engine.py` |
 | BT-002 | [ ] | P0 | Time-bounded strategy context | R rolling-window conventions | `portfolio_engine/backtesting/context.py` |
 | BT-003 | [ ] | P0 | Observe-at-`t`, execute-at-`t+1` enforcement | Execution-lag examples | `portfolio_engine/backtesting/execution.py` |
@@ -188,12 +188,12 @@ These items are not standalone models, but model results will be incomplete or m
 
 | ID | Status | Priority | Missing capability | R reference |
 | --- | --- | --- | --- | --- |
-| INF-001 | [ ] | P0 | Share-level portfolio state evolution | `bt.run.share`, `bt.run.share.ex` |
-| INF-002 | [ ] | P0 | Cash ledger for simulated activity | `compute.cash` |
-| INF-003 | [ ] | P0 | Commission model | `compute.commission` |
-| INF-004 | [ ] | P0 | Buy/sell slippage model | Execution-price examples |
-| INF-005 | [ ] | P0 | Trade and rebalance event history | `bt.trade.summary` |
-| INF-006 | [ ] | P0 | Portfolio turnover calculation | `compute.turnover` |
+| INF-001 | [~] | P0 | Share-level portfolio state evolution | `bt.run.share`, `bt.run.share.ex` |
+| INF-002 | [~] | P0 | Cash ledger for simulated activity | `compute.cash` |
+| INF-003 | [~] | P0 | Commission model | `compute.commission` |
+| INF-004 | [~] | P0 | Buy/sell slippage model | Execution-price examples |
+| INF-005 | [~] | P0 | Trade and rebalance event history | `bt.trade.summary` |
+| INF-006 | [~] | P0 | Portfolio turnover calculation | `compute.turnover` |
 | INF-007 | [ ] | P0 | Exposure calculation | `compute.exposure` |
 | INF-008 | [ ] | P1 | Dividend and split handling | `bt.unadjusted.add.div.split` |
 | INF-009 | [ ] | P1 | Contributions and withdrawals | Cash-flow event helpers |
@@ -218,8 +218,8 @@ These metrics should not block the optimization foundation, but several support 
 | MET-005 | [ ] | P2 | Conditional Drawdown at Risk metric | `compute.cdar` |
 | MET-006 | [C] | P2 | Historical VaR metric | `compute.var` |
 | MET-007 | [C] | P2 | Historical CVaR metric | `compute.cvar` |
-| MET-008 | [ ] | P1 | Turnover | `compute.turnover` |
-| MET-009 | [ ] | P1 | Allocation drift/deviation | `compute.max.deviation` |
+| MET-008 | [~] | P1 | Turnover | `compute.turnover` |
+| MET-009 | [x] | P1 | Allocation drift/deviation | `compute.max.deviation` |
 | MET-010 | [ ] | P2 | Exposure percentage | `compute.exposure` |
 | MET-011 | [ ] | P3 | Ulcer Index | `ulcer.index` |
 | MET-012 | [ ] | P3 | EV ratio | `ev.ratio` |
@@ -281,14 +281,14 @@ Recommended first-release decision:
 
 **Goal:** Convert validated target allocations into transparent simulations.
 
-- [ ] Implement target-weight validation.
-- [ ] Implement absolute and relative drift.
-- [ ] Implement simulated target values and trade notionals.
-- [ ] Implement monthly, quarterly, and annual schedules.
-- [ ] Implement absolute drift-threshold rebalancing.
-- [ ] Implement deterministic cash and cost treatment.
-- [ ] Calculate trade count, turnover, maximum drift, and costs.
-- [ ] Persist reproducible rebalance simulations.
+- [x] Implement target-weight validation.
+- [x] Implement absolute and relative drift.
+- [x] Implement simulated target values and trade notionals.
+- [x] Implement monthly, quarterly, and annual schedules.
+- [x] Implement absolute drift-threshold rebalancing.
+- [x] Implement deterministic cash and cost treatment for historical rebalancing comparisons.
+- [x] Calculate trade count, turnover, maximum drift, and costs for historical rebalancing comparisons.
+- [x] Persist reproducible current and historical rebalance simulations/comparisons.
 
 **Exit gate:** A user can compare scheduled and threshold-based rebalancing against buy-and-hold using identical inputs and assumptions.
 
@@ -410,7 +410,7 @@ Update this table as phases move forward.
 | --- | --- | --- | --- | --- |
 | 1. Optimization contracts and estimators | Not started |  |  |  |
 | 2. Initial allocation optimizers | Not started |  |  |  |
-| 3. Rebalancing engine | Not started |  |  |  |
+| 3. Rebalancing engine | Release audit pending |  |  | Historical annual/quarterly/threshold comparison and the Rebalancing Lab frontend are implemented; generic strategy/buy-and-hold work remains Phase 6 scope. |
 | 4. Backtest engine foundation | Not started |  |  |  |
 | 5. Initial strategy catalog | Not started |  |  |  |
 | 6. Risk-based allocations | Blocked by scope amendment |  |  |  |
@@ -435,6 +435,8 @@ When completing or changing an item:
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-09-15 | Initial gap register created from consolidated Python project and Systematic Investor Toolbox R comparison. |  |
+| 2026-09-18 | Reconciled Phase 5 rebalancing status: target/drift/notional rules and historical annual/quarterly/threshold comparisons implemented; shared backtest infrastructure remains partial until Phase 6. |  |
+| 2026-09-18 | Added the Rebalancing Lab frontend for target selection/creation, current drift/trade simulation, persisted policy comparison, provenance/warnings, and the deterministic browser workflow; v0.2 release audit remains. |  |
 
 ---
 

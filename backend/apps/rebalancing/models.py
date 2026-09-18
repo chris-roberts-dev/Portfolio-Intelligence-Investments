@@ -1,4 +1,4 @@
-"""Persisted target allocations and current-time rebalance simulations."""
+"""Persisted target allocations and Phase 5 rebalance simulation/comparison resources."""
 
 from __future__ import annotations
 
@@ -191,6 +191,81 @@ class RebalanceSimulation(models.Model):
             Decimal("0") <= self.drift_threshold <= Decimal("1")
         ):
             errors["drift_threshold"] = "drift_threshold must be between zero and one."
+
+        try:
+            _validate_json_finite(self.result)
+            _validate_json_finite(self.warnings)
+        except ValueError as exc:
+            errors["result"] = str(exc)
+
+        if errors:
+            raise ValidationError(errors)
+
+
+class HistoricalRebalanceComparison(models.Model):
+    """Persisted deterministic comparison of historical rebalancing policies."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="historical_rebalance_comparisons",
+    )
+    portfolio = models.ForeignKey(
+        "portfolios.Portfolio",
+        on_delete=models.CASCADE,
+        related_name="historical_rebalance_comparisons",
+    )
+    target_allocation = models.ForeignKey(
+        TargetAllocation,
+        on_delete=models.PROTECT,
+        related_name="historical_rebalance_comparisons",
+    )
+    period_start = models.DateField()
+    period_end = models.DateField()
+    provider = models.CharField(max_length=32)
+    price_field = models.CharField(max_length=32, default="adjusted_close")
+    retrieved_at = models.DateTimeField(null=True, blank=True)
+    drift_threshold = models.DecimalField(max_digits=18, decimal_places=12)
+    commission_rate = models.DecimalField(max_digits=18, decimal_places=12, default=Decimal("0"))
+    slippage_rate = models.DecimalField(max_digits=18, decimal_places=12, default=Decimal("0"))
+    engine_version = models.CharField(max_length=64)
+    result = models.JSONField()
+    warnings = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at", "id")
+
+    def __str__(self) -> str:
+        return f"HistoricalRebalanceComparison {self.id} ({self.portfolio_id})"
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+
+        if self.user_id and self.portfolio_id and self.portfolio.user_id != self.user_id:
+            errors["portfolio"] = "portfolio must belong to the comparison owner."
+
+        if self.target_allocation_id and self.portfolio_id:
+            target = self.target_allocation
+            if target.user_id != self.user_id or target.portfolio_id != self.portfolio_id:
+                errors["target_allocation"] = (
+                    "target allocation must belong to the same user and portfolio."
+                )
+
+        if self.period_start >= self.period_end:
+            errors["period_end"] = "period_end must be later than period_start."
+
+        if self.price_field != "adjusted_close":
+            errors["price_field"] = (
+                "Historical rebalancing comparisons must use adjusted_close history."
+            )
+
+        for field_name in ("drift_threshold", "commission_rate", "slippage_rate"):
+            value = getattr(self, field_name)
+            if not (Decimal("0") <= value <= Decimal("1")):
+                errors[field_name] = f"{field_name} must be between zero and one."
 
         try:
             _validate_json_finite(self.result)

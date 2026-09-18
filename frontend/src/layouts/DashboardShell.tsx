@@ -81,6 +81,22 @@ function AllocationLabIcon() {
 }
 
 
+function RebalancingLabIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="h-5 w-5 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path d="M6 7h11l-2.5-2.5M18 17H7l2.5 2.5M17 7l-2.5 2.5M7 17l2.5-2.5" />
+    </svg>
+  );
+}
+
+
 function ActivityIcon() {
   return (
     <svg
@@ -166,9 +182,14 @@ export function DashboardShell({
     location.pathname === "/allocation-lab" ||
     location.pathname.includes("/allocation-lab");
   const marketDataActive = location.pathname.startsWith("/market-data");
+  const rebalancingLabActive =
+    location.pathname === "/rebalancing-lab" ||
+    location.pathname.includes("/rebalancing-lab");
   const activityActive = location.pathname.startsWith("/activity");
   const portfoliosActive =
-    !allocationLabActive && location.pathname.startsWith("/portfolios");
+    !allocationLabActive &&
+    !rebalancingLabActive &&
+    location.pathname.startsWith("/portfolios");
   const overviewActive = location.pathname === "/";
 
   const navigationItems: NavigationItem[] = [
@@ -196,6 +217,12 @@ export function DashboardShell({
       label: "Allocation Lab",
       active: allocationLabActive,
       icon: <AllocationLabIcon />,
+    },
+    {
+      to: "/rebalancing-lab",
+      label: "Rebalancing Lab",
+      active: rebalancingLabActive,
+      icon: <RebalancingLabIcon />,
     },
     {
       to: "/activity",

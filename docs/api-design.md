@@ -26,3 +26,19 @@
 - OpenAPI schema/docs: `/api/v1/schema/`, `/api/v1/docs/`
 
 See `backend/openapi.yaml` for exact request/response schemas and operation IDs.
+
+## Phase 5 rebalancing route families
+
+- Target allocations: `/api/v1/target-allocations/`
+- Current point-in-time rebalance simulations: `/api/v1/rebalance-simulations/`
+- Persisted historical schedule/threshold comparisons:
+  `/api/v1/historical-rebalance-comparisons/`
+
+Historical comparison creation requires an owned portfolio and target allocation,
+an explicit analysis period, and an absolute drift threshold. Annual, quarterly,
+and threshold policies are always included; monthly is optional. Commission and
+slippage inputs default to the centralized normative zero rates and are persisted
+with the result. The response/persisted result discloses adjusted-close usage,
+provider retrieval provenance, engine version, decision/execution timing,
+complete-case date alignment, value/return and allocation/drift series, simulated
+fills, turnover, costs, and warnings.

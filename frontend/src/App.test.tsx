@@ -173,6 +173,27 @@ describe("App authentication routing", () => {
     ).toBeInTheDocument();
   });
 
+  it("protects the Rebalancing Lab route", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({ authenticated: false, user: null }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+      ),
+    );
+
+    renderApp("/rebalancing-lab");
+
+    expect(
+      await screen.findByRole("heading", { name: "Sign in" }),
+    ).toBeInTheDocument();
+  });
+
   it("protects the Allocation Lab route", async () => {
     vi.stubGlobal(
       "fetch",

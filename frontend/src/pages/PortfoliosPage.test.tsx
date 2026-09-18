@@ -134,8 +134,8 @@ describe("PortfoliosPage", () => {
       `/?portfolio=${portfolio.id}&range=YTD`,
     );
     expect(
-      screen.getByRole("link", { name: "Detailed dashboard" }),
-    ).toHaveAttribute("href", `/portfolios/${portfolio.id}/dashboard?range=1M`);
+      screen.getByRole("link", { name: "Portfolio dashboard" }),
+    ).toHaveAttribute("href", `/portfolios/${portfolio.id}/dashboard?range=YTD`);
     expect(screen.getByRole("link", { name: "Activity" })).toHaveAttribute(
       "href",
       `/activity?portfolio=${portfolio.id}`,

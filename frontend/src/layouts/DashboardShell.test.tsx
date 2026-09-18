@@ -45,6 +45,7 @@ describe("DashboardShell", () => {
     expect(screen.getAllByRole("link", { name: "Portfolios" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Market data" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Allocation Lab" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Rebalancing Lab" }).length).toBeGreaterThan(0);
     expect(
       screen.getAllByRole("link", { name: "Activity and Transactions" }).length,
     ).toBeGreaterThan(0);
@@ -56,6 +57,20 @@ describe("DashboardShell", () => {
     ).toBe(true);
   });
 
+
+  it("marks Rebalancing Lab active independently of portfolio navigation", () => {
+    renderShell("/portfolios/example/rebalancing-lab");
+
+    const links = screen.getAllByRole("link", { name: "Rebalancing Lab" });
+    expect(
+      links.some((link) => link.getAttribute("aria-current") === "page"),
+    ).toBe(true);
+    expect(
+      screen.getAllByRole("link", { name: "Portfolios" }).some(
+        (link) => link.getAttribute("aria-current") === "page",
+      ),
+    ).toBe(false);
+  });
 
   it("marks Activity and Transactions active and keeps navigation keyboard focusable", () => {
     renderShell("/activity?portfolio=00000000-0000-0000-0000-000000000002");

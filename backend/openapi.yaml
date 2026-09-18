@@ -257,6 +257,95 @@ paths:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
           description: ''
+  /api/v1/historical-rebalance-comparisons/:
+    get:
+      operationId: historical_rebalance_comparison_list
+      tags:
+      - rebalancing
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HistoricalRebalanceComparison'
+          description: ''
+    post:
+      operationId: historical_rebalance_comparison_create
+      tags:
+      - rebalancing
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HistoricalRebalanceComparisonCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/HistoricalRebalanceComparisonCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/HistoricalRebalanceComparisonCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricalRebalanceComparison'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebalancingValidationError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebalancingApiError'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebalancingApiError'
+          description: ''
+  /api/v1/historical-rebalance-comparisons/{comparison_id}/:
+    get:
+      operationId: historical_rebalance_comparison_detail
+      parameters:
+      - in: path
+        name: comparison_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - rebalancing
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricalRebalanceComparison'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebalancingApiError'
+          description: ''
   /api/v1/market-data/bars/query/:
     post:
       operationId: market_data_bars_query
@@ -3567,6 +3656,120 @@ components:
           readOnly: true
       required:
       - status
+    HistoricalRebalanceComparison:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        portfolio_id:
+          type: string
+          format: uuid
+          readOnly: true
+        target_allocation_id:
+          type: string
+          format: uuid
+          readOnly: true
+        period_start:
+          type: string
+          format: date
+          readOnly: true
+        period_end:
+          type: string
+          format: date
+          readOnly: true
+        provider:
+          type: string
+          readOnly: true
+        price_field:
+          type: string
+          readOnly: true
+        retrieved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        drift_threshold:
+          type: number
+          format: double
+          readOnly: true
+        commission_rate:
+          type: number
+          format: double
+          readOnly: true
+        slippage_rate:
+          type: number
+          format: double
+          readOnly: true
+        engine_version:
+          type: string
+          readOnly: true
+        result:
+          readOnly: true
+        warnings:
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - commission_rate
+      - created_at
+      - drift_threshold
+      - engine_version
+      - id
+      - period_end
+      - period_start
+      - portfolio_id
+      - price_field
+      - provider
+      - result
+      - retrieved_at
+      - slippage_rate
+      - target_allocation_id
+      - warnings
+    HistoricalRebalanceComparisonCreateRequest:
+      type: object
+      properties:
+        portfolio_id:
+          type: string
+          format: uuid
+        target_allocation_id:
+          type: string
+          format: uuid
+        period_start:
+          type: string
+          format: date
+        period_end:
+          type: string
+          format: date
+        drift_threshold:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+        commission_rate:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          default: 0.0
+        slippage_rate:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          default: 0.0
+        include_monthly:
+          type: boolean
+          default: false
+      required:
+      - drift_threshold
+      - period_end
+      - period_start
+      - portfolio_id
+      - target_allocation_id
     HoldingMetricUnavailableReasonEnum:
       enum:
       - CURRENT_PRICE_UNAVAILABLE

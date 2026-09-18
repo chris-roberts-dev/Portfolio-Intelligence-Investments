@@ -10,6 +10,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { MarketDataExplorerPage } from "./pages/MarketDataExplorerPage";
 import { PortfolioAnalysisPage } from "./pages/PortfolioAnalysisPage";
 import { PortfolioManagementPage } from "./pages/PortfolioManagementPage";
+import { RebalancingLabPage } from "./pages/RebalancingLabPage";
 import { PortfoliosPage } from "./pages/PortfoliosPage";
 
 function NotFoundPage() {
@@ -55,6 +56,13 @@ export function App() {
         <Route
           path="/portfolios/:portfolioId/allocation-lab"
           element={<AllocationLabPage />}
+        />
+
+        <Route path="/rebalancing-lab" element={<RebalancingLabPage />} />
+
+        <Route
+          path="/portfolios/:portfolioId/rebalancing-lab"
+          element={<RebalancingLabPage />}
         />
 
         <Route

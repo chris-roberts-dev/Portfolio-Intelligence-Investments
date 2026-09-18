@@ -9,15 +9,18 @@ from uuid import UUID
 from rest_framework import serializers
 
 from apps.rebalancing.models import (
+    HistoricalRebalanceComparison,
     RebalanceSimulation,
     TargetAllocation,
     TargetAllocationWeight,
 )
 from apps.rebalancing.services import (
+    CreateHistoricalRebalanceComparisonCommand,
     CreateRebalanceSimulationCommand,
     CreateTargetAllocationCommand,
     TargetWeightInput,
 )
+from portfolio_engine.config import DEFAULT_COMMISSION_RATE, DEFAULT_SLIPPAGE_RATE
 from portfolio_engine.rebalancing import RebalanceSchedule
 
 MAX_TARGET_WEIGHTS = 100
@@ -225,6 +228,67 @@ class RebalanceSimulationSerializer(serializers.Serializer[RebalanceSimulation])
         read_only=True,
         allow_null=True,
     )
+    result = serializers.JSONField(read_only=True)
+    warnings = serializers.JSONField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+
+
+class HistoricalRebalanceComparisonCreateRequestSerializer(serializers.Serializer[object]):
+    portfolio_id = serializers.UUIDField()
+    target_allocation_id = serializers.UUIDField()
+    period_start = serializers.DateField()
+    period_end = serializers.DateField()
+    drift_threshold = serializers.FloatField(min_value=0.0, max_value=1.0)
+    commission_rate = serializers.FloatField(
+        required=False,
+        default=DEFAULT_COMMISSION_RATE,
+        min_value=0.0,
+        max_value=1.0,
+    )
+    slippage_rate = serializers.FloatField(
+        required=False,
+        default=DEFAULT_SLIPPAGE_RATE,
+        min_value=0.0,
+        max_value=1.0,
+    )
+    include_monthly = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        if attrs["period_start"] >= attrs["period_end"]:
+            raise serializers.ValidationError(
+                {"period_end": "period_end must be later than period_start."}
+            )
+        return attrs
+
+    def to_command(self) -> CreateHistoricalRebalanceComparisonCommand:
+        data = cast(dict[str, Any], self.validated_data)
+        return CreateHistoricalRebalanceComparisonCommand(
+            portfolio_id=cast(UUID, data["portfolio_id"]),
+            target_allocation_id=cast(UUID, data["target_allocation_id"]),
+            period_start=data["period_start"],
+            period_end=data["period_end"],
+            drift_threshold=float(data["drift_threshold"]),
+            commission_rate=float(data["commission_rate"]),
+            slippage_rate=float(data["slippage_rate"]),
+            include_monthly=bool(data["include_monthly"]),
+        )
+
+
+class HistoricalRebalanceComparisonSerializer(
+    serializers.Serializer[HistoricalRebalanceComparison]
+):
+    id = serializers.UUIDField(read_only=True)
+    portfolio_id = serializers.UUIDField(read_only=True)
+    target_allocation_id = serializers.UUIDField(read_only=True)
+    period_start = serializers.DateField(read_only=True)
+    period_end = serializers.DateField(read_only=True)
+    provider = serializers.CharField(read_only=True)
+    price_field = serializers.CharField(read_only=True)
+    retrieved_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    drift_threshold = serializers.FloatField(read_only=True)
+    commission_rate = serializers.FloatField(read_only=True)
+    slippage_rate = serializers.FloatField(read_only=True)
+    engine_version = serializers.CharField(read_only=True)
     result = serializers.JSONField(read_only=True)
     warnings = serializers.JSONField(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)

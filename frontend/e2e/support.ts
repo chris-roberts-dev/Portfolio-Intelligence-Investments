@@ -3,6 +3,7 @@ import { expect, type Page } from "@playwright/test";
 export const SAMPLE_EMAIL = "sample.portfolio@example.test";
 export const SAMPLE_PASSWORD = "local-demo-password";
 export const SAMPLE_PORTFOLIO_NAME = "Deterministic Sample Portfolio";
+export const SAMPLE_PORTFOLIO_ID = "00000000-0000-0000-0000-00000000d001";
 export const SAMPLE_BROWSER_TIME = new Date("2026-09-16T16:00:00Z");
 
 export async function loginSampleUser(page: Page): Promise<void> {
