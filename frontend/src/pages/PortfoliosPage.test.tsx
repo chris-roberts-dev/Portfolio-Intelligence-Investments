@@ -36,6 +36,10 @@ function renderPage() {
         <Routes>
           <Route path="/portfolios" element={<PortfoliosPage />} />
           <Route
+            path="/activity"
+            element={<h1>Activity for created portfolio</h1>}
+          />
+          <Route
             path="/portfolios/:portfolioId/manage"
             element={<h1>Manage created portfolio</h1>}
           />
@@ -50,7 +54,7 @@ afterEach(() => {
 });
 
 describe("PortfoliosPage", () => {
-  it("owns portfolio creation and routes successful creation into portfolio management", async () => {
+  it("owns portfolio creation and routes successful creation into Activity & Transactions", async () => {
     document.cookie = "csrftoken=create-portfolio-page; path=/";
     const createdPortfolio = {
       id: "00000000-0000-0000-0000-000000000002",
@@ -94,7 +98,7 @@ describe("PortfoliosPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create portfolio" }));
 
     expect(
-      await screen.findByRole("heading", { name: "Manage created portfolio" }),
+      await screen.findByRole("heading", { name: "Activity for created portfolio" }),
     ).toBeInTheDocument();
   });
 
@@ -132,6 +136,10 @@ describe("PortfoliosPage", () => {
     expect(
       screen.getByRole("link", { name: "Detailed dashboard" }),
     ).toHaveAttribute("href", `/portfolios/${portfolio.id}/dashboard?range=1M`);
+    expect(screen.getByRole("link", { name: "Activity" })).toHaveAttribute(
+      "href",
+      `/activity?portfolio=${portfolio.id}`,
+    );
     expect(screen.getByRole("link", { name: "Manage" })).toHaveAttribute(
       "href",
       `/portfolios/${portfolio.id}/manage?range=1M`,

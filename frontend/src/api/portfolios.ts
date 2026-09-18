@@ -16,7 +16,7 @@ import type {
   TransactionImportRequest,
   TransactionImportResult,
 } from "../types/portfolioManagement";
-import { apiGet, apiPatch, apiPost } from "./client";
+import { apiDelete, apiGet, apiPatch, apiPost } from "./client";
 
 export interface DashboardSnapshotRequest {
   portfolioId: string;
@@ -56,6 +56,12 @@ export function renamePortfolio(
   );
 }
 
+export function deletePortfolio(portfolioId: string): Promise<void> {
+  return apiDelete(
+    `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/`,
+  );
+}
+
 export function fetchAssetCatalog(
   signal?: AbortSignal,
 ): Promise<AssetCatalogItem[]> {
@@ -79,6 +85,16 @@ export function updatePortfolioBenchmark(
   return apiPatch<PortfolioListItem, PortfolioBenchmarkRequest>(
     `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/benchmark/`,
     request,
+  );
+}
+
+export function fetchPortfolioTransactions(
+  portfolioId: string,
+  signal?: AbortSignal,
+): Promise<PortfolioTransaction[]> {
+  return apiGet<PortfolioTransaction[]>(
+    `/api/v1/portfolios/${encodeURIComponent(portfolioId)}/transactions/`,
+    { signal },
   );
 }
 

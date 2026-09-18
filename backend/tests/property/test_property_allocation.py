@@ -16,32 +16,40 @@ from portfolio_engine.portfolio.valuation import (
     value_portfolio,
 )
 
-ALLOCATION_CASE = st.integers(
-    min_value=1,
-    max_value=20,
-).flatmap(
-    lambda size: st.tuples(
-        st.lists(
+
+def allocation_case_from_pairs(
+    pairs: list[tuple[int, int]],
+    cash_cents: int,
+) -> tuple[
+    tuple[int, ...],
+    tuple[int, ...],
+    int,
+]:
+    quantities = tuple(quantity for quantity, _price in pairs)
+    prices = tuple(price for _quantity, price in pairs)
+    return quantities, prices, cash_cents
+
+
+ALLOCATION_CASE = st.builds(
+    allocation_case_from_pairs,
+    st.lists(
+        st.tuples(
             st.integers(
                 min_value=1,
                 max_value=100_000,
             ),
-            min_size=size,
-            max_size=size,
-        ).map(tuple),
-        st.lists(
             st.integers(
                 min_value=1,
                 max_value=100_000,
             ),
-            min_size=size,
-            max_size=size,
-        ).map(tuple),
-        st.integers(
-            min_value=0,
-            max_value=100_000,
         ),
-    )
+        min_size=1,
+        max_size=20,
+    ),
+    st.integers(
+        min_value=0,
+        max_value=100_000,
+    ),
 )
 
 

@@ -8,6 +8,7 @@ import {
 import { ApiError } from "../api/client";
 import { MarketCandlestickChart } from "../components/charts/MarketCandlestickChart";
 import { MarketPriceChart } from "../components/charts/MarketPriceChart";
+import { DomainPageHeader } from "../components/ui/DomainPageHeader";
 import { Skeleton } from "../components/ui/Skeleton";
 import { StatePanel } from "../components/ui/StatePanel";
 import {
@@ -177,8 +178,8 @@ function queryErrorTitle(
 function MarketDataSkeleton() {
   return (
     <div aria-label="Loading market data">
-      <Skeleton className="h-32 w-full rounded-3xl" />
-      <Skeleton className="mt-5 h-80 w-full rounded-3xl" />
+      <Skeleton className="h-32 w-full rounded-2xl" />
+      <Skeleton className="mt-5 h-80 w-full rounded-2xl" />
     </div>
   );
 }
@@ -354,17 +355,11 @@ export function MarketDataExplorerPage() {
   );
 
   const header = (
-    <div className="mx-auto flex min-h-20 w-full max-w-[1600px] items-center px-4 py-3 sm:px-6 lg:px-8">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">
-          Provider-neutral market data
-        </p>
-
-        <h1 className="mt-1 text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">
-          Market Data Explorer
-        </h1>
-      </div>
-    </div>
+    <DomainPageHeader
+      eyebrow="Research workspace"
+      title="Market Data Explorer"
+      description="Research canonical securities with bounded, provider-neutral daily market data and explicit provenance."
+    />
   );
 
   function selectDetailSymbol(
@@ -454,7 +449,7 @@ export function MarketDataExplorerPage() {
 
   return (
     <DashboardShell header={header}>
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div className="max-w-3xl">
           <h2 className="text-lg font-semibold tracking-tight text-slate-950">
             Query daily market bars
@@ -492,7 +487,7 @@ export function MarketDataExplorerPage() {
               }
               rows={3}
               placeholder={"AAPL, MSFT\nSPY"}
-              className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm uppercase text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm uppercase text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
               aria-describedby="ticker-help"
             />
 
@@ -543,7 +538,7 @@ export function MarketDataExplorerPage() {
                   event.target.value,
                 )
               }
-              className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             />
           </div>
 
@@ -564,14 +559,14 @@ export function MarketDataExplorerPage() {
                   event.target.value,
                 )
               }
-              className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             />
           </div>
 
           <div className="flex items-start lg:col-span-2 lg:pt-6">
             <button
               type="submit"
-              className="w-full rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white outline-none transition hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm outline-none transition hover:bg-blue-700 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
             >
               Query
             </button>
@@ -627,7 +622,7 @@ export function MarketDataExplorerPage() {
                 onClick={() =>
                   void marketQuery.refetch()
                 }
-                className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
               >
                 Retry
               </button>
@@ -671,7 +666,7 @@ export function MarketDataExplorerPage() {
             </div>
           ) : null}
 
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
@@ -769,7 +764,7 @@ export function MarketDataExplorerPage() {
             />
           ) : (
             <section
-              className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
               aria-labelledby="symbol-status-heading"
             >
               <h2
@@ -815,7 +810,7 @@ export function MarketDataExplorerPage() {
             <section
               ref={detailSectionRef}
               id="market-candlestick-detail"
-              className="scroll-mt-28 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+              className="scroll-mt-28 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
               aria-labelledby="candlestick-heading"
             >
               <h2
@@ -844,7 +839,7 @@ export function MarketDataExplorerPage() {
 
           {successfulResults.length > 0 ? (
             <section
-              className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
               aria-labelledby="raw-price-heading"
             >
               <h2

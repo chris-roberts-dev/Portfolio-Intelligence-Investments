@@ -32,7 +32,7 @@ export function PortfoliosPage() {
     try {
       const portfolio = await createPortfolioMutation.mutateAsync({ name });
       setPortfolioName("");
-      navigate(`/portfolios/${portfolio.id}/manage?range=1M`);
+      navigate(`/activity?portfolio=${encodeURIComponent(portfolio.id)}`);
     } catch {
       // Mutation state renders the authoritative server error.
     }
@@ -175,6 +175,12 @@ export function PortfoliosPage() {
                       Detailed dashboard
                     </Link>
                     <Link
+                      to={`/activity?portfolio=${encodeURIComponent(portfolio.id)}`}
+                      className="inline-flex min-h-9 items-center rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-800 outline-none hover:bg-blue-100 focus-visible:ring-2 focus-visible:ring-blue-500"
+                    >
+                      Activity
+                    </Link>
+                    <Link
                       to={`/portfolios/${portfolio.id}/manage?range=1M`}
                       className="inline-flex min-h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500"
                     >
@@ -187,7 +193,7 @@ export function PortfoliosPage() {
           ) : (
             <StatePanel
               title="No portfolios yet"
-              message="Create your first portfolio here, then add transactions manually or import the supported CSV format."
+              message="Create your first portfolio here, then use Activity & Transactions to add transactions manually or import the supported CSV format."
             />
           )}
         </section>

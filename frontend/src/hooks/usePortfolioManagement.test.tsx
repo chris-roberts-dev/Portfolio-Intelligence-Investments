@@ -9,6 +9,7 @@ import {
   useConfirmPortfolioTransactionImport,
   useCreatePortfolio,
   useCreatePortfolioTransaction,
+  useDeletePortfolio,
   useRenamePortfolio,
   useUpdatePortfolioBenchmark,
 } from "./usePortfolioData";
@@ -84,7 +85,73 @@ describe("portfolio management query invalidation", () => {
       ),
     ).toBe(false);
   });
-  it("invalidates dashboard and analysis after a manual transaction", async () => {
+
+  it("invalidates the portfolio list and removes deleted portfolio derived caches", async () => {
+    document.cookie = "csrftoken=portfolio-delete-hook; path=/";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 204 })),
+    );
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    queryClient.setQueryData(
+      ["portfolio-dashboard", PORTFOLIO_ID, "2026-09-01", "2026-09-17"],
+      { snapshot: true },
+    );
+    queryClient.setQueryData(
+      ["portfolio-analysis", PORTFOLIO_ID, "2026-09-01", "2026-09-17"],
+      { analytics: true },
+    );
+    queryClient.setQueryData(
+      ["portfolio-transactions", PORTFOLIO_ID],
+      [{ id: "transaction" }],
+    );
+
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const removeSpy = vi.spyOn(queryClient, "removeQueries");
+    const { result } = renderHook(() => useDeletePortfolio(PORTFOLIO_ID), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync();
+    });
+
+    expect(removeSpy).toHaveBeenCalledWith({
+      queryKey: ["portfolio-dashboard", PORTFOLIO_ID],
+    });
+    expect(removeSpy).toHaveBeenCalledWith({
+      queryKey: ["portfolio-analysis", PORTFOLIO_ID],
+    });
+    expect(removeSpy).toHaveBeenCalledWith({
+      queryKey: ["portfolio-transactions", PORTFOLIO_ID],
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["portfolios"],
+    });
+    expect(
+      queryClient.getQueriesData({
+        queryKey: ["portfolio-dashboard", PORTFOLIO_ID],
+      }),
+    ).toEqual([]);
+    expect(
+      queryClient.getQueriesData({
+        queryKey: ["portfolio-analysis", PORTFOLIO_ID],
+      }),
+    ).toEqual([]);
+    expect(
+      queryClient.getQueriesData({
+        queryKey: ["portfolio-transactions", PORTFOLIO_ID],
+      }),
+    ).toEqual([]);
+  });
+
+  it("invalidates transaction history, dashboard, and analysis after a manual transaction", async () => {
     document.cookie = "csrftoken=manual-transaction-hook; path=/";
     vi.stubGlobal(
       "fetch",
@@ -133,6 +200,9 @@ describe("portfolio management query invalidation", () => {
     });
 
     expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["portfolio-transactions", PORTFOLIO_ID],
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ["portfolio-dashboard", PORTFOLIO_ID],
     });
     expect(invalidateSpy).toHaveBeenCalledWith({
@@ -140,7 +210,7 @@ describe("portfolio management query invalidation", () => {
     });
   });
 
-  it("invalidates the same authoritative reads after atomic CSV confirmation", async () => {
+  it("invalidates history and derived reads after atomic CSV confirmation", async () => {
     document.cookie = "csrftoken=csv-confirm-hook; path=/";
     vi.stubGlobal(
       "fetch",
@@ -174,6 +244,9 @@ describe("portfolio management query invalidation", () => {
       await result.current.mutateAsync({ csv_text: "csv" });
     });
 
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["portfolio-transactions", PORTFOLIO_ID],
+    });
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ["portfolio-dashboard", PORTFOLIO_ID],
     });

@@ -68,6 +68,10 @@ from apps.portfolios.services.current_valuation import (
     value_owned_portfolio,
 )
 from apps.portfolios.services.daily_performance import DailyPerformanceError
+from apps.portfolios.services.portfolio_lifecycle import (
+    PortfolioDeletionError,
+    delete_empty_owned_portfolio,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,15 +187,60 @@ def portfolio_list_view(request: Request) -> Response:
         },
         tags=["portfolios"],
     ),
+    delete=extend_schema(
+        operation_id="portfolio_delete",
+        description=(
+            "Permanently delete one owned portfolio only when it has no persisted "
+            "transaction or analytical history."
+        ),
+        request=None,
+        responses={
+            status.HTTP_204_NO_CONTENT: OpenApiResponse(
+                description="Empty owned portfolio permanently deleted.",
+            ),
+            status.HTTP_404_NOT_FOUND: OpenApiResponse(
+                response=PortfolioApiErrorSerializer,
+                description=("The portfolio does not exist in the authenticated user's scope."),
+            ),
+            status.HTTP_409_CONFLICT: OpenApiResponse(
+                response=PortfolioApiErrorSerializer,
+                description=(
+                    "Permanent deletion is blocked because retained transaction or "
+                    "analytical history exists."
+                ),
+            ),
+        },
+        tags=["portfolios"],
+    ),
 )
-@api_view(["GET", "PATCH"])
+@api_view(["GET", "PATCH", "DELETE"])
 @permission_classes([IsAuthenticated])
 def portfolio_detail_view(
     request: Request,
     portfolio_id: UUID,
 ) -> Response:
-    """Return or rename one owner-scoped portfolio without exposing other users' rows."""
+    """Read, rename, or safely delete one owner-scoped portfolio."""
     user = cast(User, request.user)
+
+    if request.method == "DELETE":
+        try:
+            delete_empty_owned_portfolio(
+                user=user,
+                portfolio_id=portfolio_id,
+            )
+        except Portfolio.DoesNotExist:
+            return _portfolio_not_found_response()
+        except PortfolioDeletionError as exc:
+            return Response(
+                {
+                    "code": exc.code.value,
+                    "detail": str(exc),
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     portfolio = _owned_portfolio(user, portfolio_id)
 
     if portfolio is None:

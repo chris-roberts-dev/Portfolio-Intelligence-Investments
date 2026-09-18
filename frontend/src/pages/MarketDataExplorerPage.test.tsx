@@ -169,6 +169,14 @@ describe(
 
       renderPage();
 
+      const heading = screen.getByRole("heading", {
+        name: "Market Data Explorer",
+      });
+      expect(heading.closest('[data-ui="domain-page-header"]')).not.toBeNull();
+      expect(screen.getByRole("button", { name: "Query" })).toHaveClass(
+        "bg-blue-600",
+      );
+
       expect(
         screen.getByText(
           "Submit a market-data query",

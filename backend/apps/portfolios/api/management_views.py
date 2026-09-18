@@ -1,11 +1,11 @@
-"""Authenticated asset catalog and owned-portfolio transaction mutation APIs."""
+"""Authenticated asset catalog and owned-portfolio transaction read/mutation APIs."""
 
 from __future__ import annotations
 
 from typing import Any, cast
 from uuid import UUID
 
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -40,7 +40,7 @@ from apps.portfolios.api.management_serializers import (
     TransactionImportResultSerializer,
     TransactionWriteValidationErrorSerializer,
 )
-from apps.portfolios.models import Portfolio
+from apps.portfolios.models import Portfolio, Transaction
 from apps.portfolios.services.transaction_ingestion import (
     TransactionImportFileError,
     TransactionImportValidationError,
@@ -163,41 +163,75 @@ def asset_resolve_view(request: Request) -> Response:
     )
 
 
-@extend_schema(
-    operation_id="portfolio_transaction_create",
-    description=(
-        "Create one canonical owned-portfolio ledger transaction and replay the "
-        "authoritative long-only ledger before commit."
+@extend_schema_view(
+    get=extend_schema(
+        operation_id="portfolio_transaction_list",
+        description=(
+            "List every persisted transaction in one authenticated-user-owned portfolio "
+            "in reverse deterministic ledger order (newest occurred_at/source_sequence first)."
+        ),
+        responses={
+            status.HTTP_200_OK: OpenApiResponse(
+                response=PortfolioTransactionSerializer(many=True),
+                description="Persisted portfolio transaction history, newest first.",
+            ),
+            status.HTTP_404_NOT_FOUND: OpenApiResponse(
+                response=PortfolioApiErrorSerializer,
+                description="The portfolio does not exist in the authenticated user's scope.",
+            ),
+        },
+        tags=["transactions"],
     ),
-    request=PortfolioTransactionCreateRequestSerializer,
-    responses={
-        status.HTTP_201_CREATED: OpenApiResponse(
-            response=PortfolioTransactionSerializer,
-            description="Persisted canonical transaction.",
+    post=extend_schema(
+        operation_id="portfolio_transaction_create",
+        description=(
+            "Create one canonical owned-portfolio ledger transaction and replay the "
+            "authoritative long-only ledger before commit."
         ),
-        status.HTTP_400_BAD_REQUEST: OpenApiResponse(
-            response=TransactionWriteValidationErrorSerializer,
-            description="Transaction input or ledger replay validation failed.",
-        ),
-        status.HTTP_404_NOT_FOUND: OpenApiResponse(
-            response=PortfolioApiErrorSerializer,
-            description="The portfolio does not exist in the authenticated user's scope.",
-        ),
-    },
-    tags=["transactions"],
+        request=PortfolioTransactionCreateRequestSerializer,
+        responses={
+            status.HTTP_201_CREATED: OpenApiResponse(
+                response=PortfolioTransactionSerializer,
+                description="Persisted canonical transaction.",
+            ),
+            status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+                response=TransactionWriteValidationErrorSerializer,
+                description="Transaction input or ledger replay validation failed.",
+            ),
+            status.HTTP_404_NOT_FOUND: OpenApiResponse(
+                response=PortfolioApiErrorSerializer,
+                description="The portfolio does not exist in the authenticated user's scope.",
+            ),
+        },
+        tags=["transactions"],
+    ),
 )
-@api_view(["POST"])
+@api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def portfolio_transaction_create_view(
     request: Request,
     portfolio_id: UUID,
 ) -> Response:
-    """Validate and commit one transaction to an owner-scoped portfolio."""
+    """List or append canonical transactions for one owner-scoped portfolio."""
     user = cast(User, request.user)
     portfolio = _owned_portfolio(user, portfolio_id)
 
     if portfolio is None:
         return _portfolio_not_found_response()
+
+    if request.method == "GET":
+        transactions = (
+            Transaction.objects.for_portfolio(portfolio)
+            .select_related("asset")
+            .order_by("-occurred_at", "-source_sequence", "-id")
+        )
+        return Response(
+            PortfolioTransactionSerializer(
+                cast(Any, transactions),
+                many=True,
+            ).data,
+            status=status.HTTP_200_OK,
+        )
 
     serializer = PortfolioTransactionCreateRequestSerializer(data=request.data)
     if not serializer.is_valid():

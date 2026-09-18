@@ -90,6 +90,113 @@ def test_asset_catalog_returns_only_active_canonical_usd_assets(
 
 
 @pytest.mark.django_db
+def test_owner_lists_complete_transaction_history_newest_first(
+    owner: User,
+    portfolio: Portfolio,
+    asset: Asset,
+) -> None:
+    older = Transaction.objects.create(
+        portfolio=portfolio,
+        transaction_type="DEPOSIT",
+        occurred_at=datetime(2026, 9, 14, 13, tzinfo=UTC),
+        source_sequence=0,
+        cash_amount=Decimal("1000.00"),
+    )
+    first_same_time = Transaction.objects.create(
+        portfolio=portfolio,
+        transaction_type="BUY",
+        asset=asset,
+        occurred_at=datetime(2026, 9, 15, 14, tzinfo=UTC),
+        source_sequence=0,
+        quantity=Decimal("2"),
+        price=Decimal("100.00"),
+        fees=Decimal("1.00"),
+    )
+    second_same_time = Transaction.objects.create(
+        portfolio=portfolio,
+        transaction_type="DIVIDEND",
+        asset=asset,
+        occurred_at=datetime(2026, 9, 15, 14, tzinfo=UTC),
+        source_sequence=1,
+        cash_amount=Decimal("12.50"),
+    )
+    other_portfolio = Portfolio.objects.create(
+        user=owner,
+        name="Other owned portfolio",
+    )
+    Transaction.objects.create(
+        portfolio=other_portfolio,
+        transaction_type="DEPOSIT",
+        occurred_at=datetime(2026, 9, 16, 14, tzinfo=UTC),
+        cash_amount=Decimal("9999.00"),
+    )
+
+    response = authenticated_client(owner).get(
+        reverse(
+            "api-v1-portfolio-transaction-create",
+            kwargs={"portfolio_id": portfolio.id},
+        )
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert [item["id"] for item in response.data] == [
+        str(second_same_time.id),
+        str(first_same_time.id),
+        str(older.id),
+    ]
+    assert response.data[0]["transaction_type"] == "DIVIDEND"
+    assert response.data[0]["asset_id"] == str(asset.id)
+    assert response.data[0]["asset_symbol"] == "AAPL"
+    assert response.data[0]["cash_amount"] == "12.50000000"
+    assert response.data[2]["transaction_type"] == "DEPOSIT"
+    assert response.data[2]["asset_id"] is None
+    assert response.data[2]["asset_symbol"] is None
+
+
+@pytest.mark.django_db
+def test_transaction_history_respects_portfolio_ownership(
+    other_user: User,
+    portfolio: Portfolio,
+) -> None:
+    Transaction.objects.create(
+        portfolio=portfolio,
+        transaction_type="DEPOSIT",
+        occurred_at=datetime(2026, 9, 15, 14, tzinfo=UTC),
+        cash_amount=Decimal("100.00"),
+    )
+
+    response = authenticated_client(other_user).get(
+        reverse(
+            "api-v1-portfolio-transaction-create",
+            kwargs={"portfolio_id": portfolio.id},
+        )
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.data == {
+        "code": "PORTFOLIO_NOT_FOUND",
+        "detail": "Portfolio was not found.",
+    }
+
+
+@pytest.mark.django_db
+def test_transaction_history_requires_authentication(
+    portfolio: Portfolio,
+) -> None:
+    response = APIClient().get(
+        reverse(
+            "api-v1-portfolio-transaction-create",
+            kwargs={"portfolio_id": portfolio.id},
+        )
+    )
+
+    assert response.status_code in {
+        status.HTTP_401_UNAUTHORIZED,
+        status.HTTP_403_FORBIDDEN,
+    }
+
+
+@pytest.mark.django_db
 def test_manual_transactions_replay_through_authoritative_ledger(
     owner: User,
     portfolio: Portfolio,

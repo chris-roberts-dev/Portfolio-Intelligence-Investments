@@ -16,6 +16,7 @@ import {
   type AllocationComparisonRow,
 } from "../components/charts/AllocationComparisonChart";
 import { EfficientFrontierChart } from "../components/charts/EfficientFrontierChart";
+import { DomainPageHeader } from "../components/ui/DomainPageHeader";
 import { Skeleton } from "../components/ui/Skeleton";
 import { StatePanel } from "../components/ui/StatePanel";
 import {
@@ -163,8 +164,8 @@ function runSourceLabel(run: OptimizationRun): string {
 function LabSkeleton() {
   return (
     <div aria-label="Loading Allocation Lab">
-      <Skeleton className="h-40 w-full rounded-3xl" />
-      <Skeleton className="mt-5 h-96 w-full rounded-3xl" />
+      <Skeleton className="h-40 w-full rounded-2xl" />
+      <Skeleton className="mt-5 h-96 w-full rounded-2xl" />
     </div>
   );
 }
@@ -621,22 +622,16 @@ export function AllocationLabPage() {
   }
 
   const header = (
-    <div className="mx-auto flex min-h-20 w-full max-w-[1600px] flex-wrap items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">
-          Research workspace
-        </p>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">
-          Allocation Lab
-        </h1>
-        <p className="mt-1 text-xs text-slate-500">
-          Build a hypothetical universe or import an owned portfolio without mutating its ledger.
-        </p>
-      </div>
-      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
-        Server-authoritative optimization
-      </span>
-    </div>
+    <DomainPageHeader
+      eyebrow="Research workspace"
+      title="Allocation Lab"
+      description="Build a hypothetical universe or import an owned portfolio for server-authoritative optimization without mutating its ledger."
+      actions={
+        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+          Server-authoritative optimization
+        </span>
+      }
+    />
   );
 
   if (portfoliosQuery.isPending || assetCatalogQuery.isPending) {
@@ -650,7 +645,7 @@ export function AllocationLabPage() {
   return (
     <DashboardShell header={header}>
       <div className="space-y-5">
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <h2 className="text-lg font-semibold text-slate-950">Allocation source</h2>
           <p className="mt-1 text-sm text-slate-600">
             Ad hoc analysis does not create a real portfolio. Existing-portfolio import is read-only.
@@ -661,7 +656,7 @@ export function AllocationLabPage() {
               type="button"
               aria-pressed={sourceMode === "AD_HOC"}
               onClick={() => updateSourceMode("AD_HOC")}
-              className={`rounded-xl border px-4 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+              className={`rounded-lg border px-4 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                 sourceMode === "AD_HOC"
                   ? "border-blue-300 bg-blue-50 text-blue-900"
                   : "border-slate-200 bg-white text-slate-700"
@@ -673,7 +668,7 @@ export function AllocationLabPage() {
               type="button"
               aria-pressed={sourceMode === "PORTFOLIO"}
               onClick={() => updateSourceMode("PORTFOLIO")}
-              className={`rounded-xl border px-4 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+              className={`rounded-lg border px-4 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                 sourceMode === "PORTFOLIO"
                   ? "border-blue-300 bg-blue-50 text-blue-900"
                   : "border-slate-200 bg-white text-slate-700"
@@ -690,7 +685,7 @@ export function AllocationLabPage() {
                 <select
                   value={portfolioId}
                   onChange={(event) => updatePortfolio(event.target.value)}
-                  className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 >
                   <option value="">Select portfolio</option>
                   {(portfoliosQuery.data ?? []).map((portfolio) => (
@@ -704,7 +699,7 @@ export function AllocationLabPage() {
                 type="button"
                 disabled={!portfolioId || snapshotQuery.isPending}
                 onClick={importPortfolioHoldings}
-                className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50"
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 {snapshotQuery.isPending ? "Loading holdings…" : "Import current holdings"}
               </button>
@@ -732,12 +727,12 @@ export function AllocationLabPage() {
                   value={symbolInput}
                   onChange={(event) => setSymbolInput(event.target.value)}
                   placeholder="AAPL, MSFT, QQQ"
-                  className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm uppercase outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm uppercase outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 />
                 <button
                   type="submit"
                   disabled={resolveAssetsMutation.isPending}
-                  className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50"
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50"
                 >
                   {resolveAssetsMutation.isPending ? "Resolving…" : "Add canonical assets"}
                 </button>
@@ -756,7 +751,7 @@ export function AllocationLabPage() {
         </section>
 
         <form className="space-y-5" onSubmit={submitOptimization}>
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <h2 className="text-lg font-semibold text-slate-950">Configuration</h2>
             <p className="mt-1 text-sm text-slate-600">
               These are supported user-controlled inputs. Canonical methodology remains fixed below.
@@ -769,7 +764,7 @@ export function AllocationLabPage() {
                   type="date"
                   value={start}
                   onChange={(event) => setStart(event.target.value)}
-                  className="mt-1 block w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 />
               </label>
               <label className="block text-xs font-semibold text-slate-700">
@@ -778,7 +773,7 @@ export function AllocationLabPage() {
                   type="date"
                   value={end}
                   onChange={(event) => setEnd(event.target.value)}
-                  className="mt-1 block w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 />
               </label>
               <label className="block text-xs font-semibold text-slate-700">
@@ -788,7 +783,7 @@ export function AllocationLabPage() {
                   onChange={(event) =>
                     setMethod(event.target.value as OptimizationRunMethod)
                   }
-                  className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 >
                   {METHOD_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -804,7 +799,7 @@ export function AllocationLabPage() {
                   step="0.0001"
                   value={riskFreeRate}
                   onChange={(event) => setRiskFreeRate(event.target.value)}
-                  className="mt-1 block w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 />
               </label>
               {method === "EFFICIENT_FRONTIER" ? (
@@ -817,7 +812,7 @@ export function AllocationLabPage() {
                     step={1}
                     value={frontierPoints}
                     onChange={(event) => setFrontierPoints(event.target.value)}
-                    className="mt-1 block w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                   />
                 </label>
               ) : null}
@@ -948,14 +943,14 @@ export function AllocationLabPage() {
             <button
               type="submit"
               disabled={createRun.isPending || selectedAssets.length === 0}
-              className="mt-5 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white outline-none hover:bg-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50"
+              className="mt-5 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white outline-none hover:bg-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50"
             >
               {createRun.isPending ? "Running optimization…" : "Run optimization"}
             </button>
           </section>
         </form>
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <h2 className="text-lg font-semibold text-slate-950">Methodology</h2>
           <p className="mt-1 text-sm text-slate-600">
             These canonical analytical rules are intentionally read-only.
@@ -1017,7 +1012,7 @@ export function AllocationLabPage() {
         ) : null}
 
         {activeRun ? (
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
@@ -1112,7 +1107,7 @@ export function AllocationLabPage() {
         ) : null}
 
         {selectedAssets.length > 0 ? (
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <h2 className="text-lg font-semibold text-slate-950">
               Allocation comparison
             </h2>
@@ -1131,7 +1126,7 @@ export function AllocationLabPage() {
         ) : null}
 
         {(frontierRun?.result?.frontier.length ?? 0) > 0 ? (
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <h2 className="text-lg font-semibold text-slate-950">Efficient frontier</h2>
             <p className="mt-1 text-sm text-slate-600">
               Every plotted point is returned by the server. No interpolation is performed.
@@ -1145,7 +1140,7 @@ export function AllocationLabPage() {
           </section>
         ) : null}
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <h2 className="text-lg font-semibold text-slate-950">Run history</h2>
           <p className="mt-1 text-sm text-slate-600">
             Previous ad hoc and portfolio-derived runs remain immutable and auditable.

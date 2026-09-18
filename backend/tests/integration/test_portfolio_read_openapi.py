@@ -20,6 +20,7 @@ def test_openapi_schema_exposes_owned_portfolio_read_contracts() -> None:
 
     portfolio_list = paths["/api/v1/portfolios/"]["get"]
     portfolio_detail = paths["/api/v1/portfolios/{portfolio_id}/"]["get"]
+    portfolio_delete = paths["/api/v1/portfolios/{portfolio_id}/"]["delete"]
     holdings = paths["/api/v1/portfolios/{portfolio_id}/holdings/"]["get"]
     analytics = paths["/api/v1/analytics/portfolios/{portfolio_id}/"]["get"]
 
@@ -29,6 +30,10 @@ def test_openapi_schema_exposes_owned_portfolio_read_contracts() -> None:
 
     assert portfolio_detail["operationId"] == "portfolio_detail"
     assert set(portfolio_detail["responses"]) == {"200", "404"}
+
+    assert portfolio_delete["operationId"] == "portfolio_delete"
+    assert portfolio_delete["tags"] == ["portfolios"]
+    assert set(portfolio_delete["responses"]) == {"204", "404", "409"}
 
     assert holdings["operationId"] == "portfolio_current_holdings"
     assert holdings["tags"] == ["portfolios"]

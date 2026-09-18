@@ -168,12 +168,19 @@ export function DashboardPage() {
               </Link>
 
               <Link
+                to={`/activity?portfolio=${encodeURIComponent(portfolioId)}`}
+                className="text-blue-700 outline-none underline decoration-blue-200 underline-offset-4 hover:text-blue-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              >
+                Activity & Transactions
+              </Link>
+
+              <Link
                 to={`/portfolios/${encodeURIComponent(
                   portfolioId,
                 )}/manage?range=${encodeURIComponent(range)}`}
                 className="text-slate-700 outline-none underline decoration-slate-200 underline-offset-4 hover:text-slate-950 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
               >
-                Manage portfolio & transactions
+                Manage portfolio
               </Link>
             </div>
           ) : null}

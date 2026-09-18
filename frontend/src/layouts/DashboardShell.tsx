@@ -80,6 +80,22 @@ function AllocationLabIcon() {
   );
 }
 
+
+function ActivityIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="h-5 w-5 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path d="M7 3h10a2 2 0 0 1 2 2v16l-3-2-4 2-4-2-3 2V5a2 2 0 0 1 2-2Zm2 5h6M9 12h6M9 16h4" />
+    </svg>
+  );
+}
+
 function MenuIcon() {
   return (
     <svg
@@ -150,6 +166,7 @@ export function DashboardShell({
     location.pathname === "/allocation-lab" ||
     location.pathname.includes("/allocation-lab");
   const marketDataActive = location.pathname.startsWith("/market-data");
+  const activityActive = location.pathname.startsWith("/activity");
   const portfoliosActive =
     !allocationLabActive && location.pathname.startsWith("/portfolios");
   const overviewActive = location.pathname === "/";
@@ -179,6 +196,12 @@ export function DashboardShell({
       label: "Allocation Lab",
       active: allocationLabActive,
       icon: <AllocationLabIcon />,
+    },
+    {
+      to: "/activity",
+      label: "Activity and Transactions",
+      active: activityActive,
+      icon: <ActivityIcon />,
     },
   ];
 

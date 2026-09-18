@@ -9,9 +9,11 @@ import {
   confirmPortfolioTransactionImport,
   createPortfolio,
   createPortfolioTransaction,
+  deletePortfolio,
   fetchAssetCatalog,
   fetchDashboardSnapshot,
   fetchPortfolioAnalytics,
+  fetchPortfolioTransactions,
   fetchPortfolios,
   previewPortfolioTransactionImport,
   renamePortfolio,
@@ -31,6 +33,10 @@ import type {
 
 export const PORTFOLIOS_QUERY_KEY = ["portfolios"] as const;
 export const ASSET_CATALOG_QUERY_KEY = ["asset-catalog"] as const;
+
+export function portfolioTransactionsQueryKey(portfolioId: string) {
+  return ["portfolio-transactions", portfolioId] as const;
+}
 
 async function invalidatePortfolioDerivedQueries(
   queryClient: QueryClient,
@@ -81,6 +87,41 @@ export function useRenamePortfolio(portfolioId: string) {
   });
 }
 
+export function useDeletePortfolio(portfolioId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => deletePortfolio(portfolioId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.cancelQueries({
+          queryKey: ["portfolio-dashboard", portfolioId],
+        }),
+        queryClient.cancelQueries({
+          queryKey: ["portfolio-analysis", portfolioId],
+        }),
+        queryClient.cancelQueries({
+          queryKey: portfolioTransactionsQueryKey(portfolioId),
+        }),
+      ]);
+
+      queryClient.removeQueries({
+        queryKey: ["portfolio-dashboard", portfolioId],
+      });
+      queryClient.removeQueries({
+        queryKey: ["portfolio-analysis", portfolioId],
+      });
+      queryClient.removeQueries({
+        queryKey: portfolioTransactionsQueryKey(portfolioId),
+      });
+
+      await queryClient.invalidateQueries({
+        queryKey: PORTFOLIOS_QUERY_KEY,
+      });
+    },
+  });
+}
+
 export function useAssetCatalog() {
   return useQuery({
     queryKey: ASSET_CATALOG_QUERY_KEY,
@@ -118,6 +159,27 @@ export function useUpdatePortfolioBenchmark(portfolioId: string) {
   });
 }
 
+export function usePortfolioTransactions(portfolioId: string) {
+  return useQuery({
+    queryKey: portfolioTransactionsQueryKey(portfolioId),
+    queryFn: ({ signal }) => fetchPortfolioTransactions(portfolioId, signal),
+    enabled: portfolioId.length > 0,
+    staleTime: 30_000,
+  });
+}
+
+async function invalidatePortfolioLedgerQueries(
+  queryClient: QueryClient,
+  portfolioId: string,
+): Promise<void> {
+  await Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: portfolioTransactionsQueryKey(portfolioId),
+    }),
+    invalidatePortfolioDerivedQueries(queryClient, portfolioId),
+  ]);
+}
+
 export function useCreatePortfolioTransaction(portfolioId: string) {
   const queryClient = useQueryClient();
 
@@ -125,7 +187,7 @@ export function useCreatePortfolioTransaction(portfolioId: string) {
     mutationFn: (request: PortfolioTransactionCreateRequest) =>
       createPortfolioTransaction(portfolioId, request),
     onSuccess: async () => {
-      await invalidatePortfolioDerivedQueries(queryClient, portfolioId);
+      await invalidatePortfolioLedgerQueries(queryClient, portfolioId);
     },
   });
 }
@@ -144,7 +206,7 @@ export function useConfirmPortfolioTransactionImport(portfolioId: string) {
     mutationFn: (request: TransactionImportRequest) =>
       confirmPortfolioTransactionImport(portfolioId, request),
     onSuccess: async () => {
-      await invalidatePortfolioDerivedQueries(queryClient, portfolioId);
+      await invalidatePortfolioLedgerQueries(queryClient, portfolioId);
     },
   });
 }

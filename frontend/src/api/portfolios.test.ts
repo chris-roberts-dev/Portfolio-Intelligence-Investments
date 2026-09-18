@@ -2,9 +2,11 @@ import {
   confirmPortfolioTransactionImport,
   createPortfolio,
   createPortfolioTransaction,
+  deletePortfolio,
   fetchAssetCatalog,
   fetchDashboardSnapshot,
   fetchPortfolioAnalytics,
+  fetchPortfolioTransactions,
   previewPortfolioTransactionImport,
   renamePortfolio,
   updatePortfolioBenchmark,
@@ -161,6 +163,30 @@ describe("portfolio management APIs", () => {
   });
 
 
+  it("deletes an owned empty portfolio with CSRF and accepts a 204 response", async () => {
+    document.cookie = "csrftoken=portfolio-delete-test; path=/";
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(null, { status: 204 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await deletePortfolio("00000000-0000-0000-0000-000000000002");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/portfolios/00000000-0000-0000-0000-000000000002/",
+      expect.objectContaining({
+        method: "DELETE",
+        credentials: "include",
+        headers: expect.any(Headers),
+      }),
+    );
+
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    expect(headers.get("X-CSRFToken")).toBe("portfolio-delete-test");
+  });
+
+
   it("updates an owned portfolio benchmark with a canonical asset identity", async () => {
     document.cookie = "csrftoken=benchmark-management-test; path=/";
     const fetchMock = vi.fn(
@@ -202,7 +228,7 @@ describe("portfolio management APIs", () => {
   it("uses canonical asset and transaction ingestion endpoints", async () => {
     document.cookie = "csrftoken=transaction-management-test; path=/";
     const fetchMock = vi.fn(
-      async (input: RequestInfo | URL) => {
+      async (input: RequestInfo | URL, _init?: RequestInit) => {
         const url = String(input);
         const body = url.endsWith("/assets/") ? [] : {};
         return new Response(JSON.stringify(body), {
@@ -215,6 +241,7 @@ describe("portfolio management APIs", () => {
 
     const portfolioId = "00000000-0000-0000-0000-000000000002";
     await fetchAssetCatalog();
+    await fetchPortfolioTransactions(portfolioId);
     await createPortfolioTransaction(portfolioId, {
       transaction_type: "DEPOSIT",
       occurred_at: "2026-09-16T12:00:00Z",
@@ -230,9 +257,12 @@ describe("portfolio management APIs", () => {
     expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
       "/api/v1/assets/",
       `/api/v1/portfolios/${portfolioId}/transactions/`,
+      `/api/v1/portfolios/${portfolioId}/transactions/`,
       `/api/v1/portfolios/${portfolioId}/transactions/import/preview/`,
       `/api/v1/portfolios/${portfolioId}/transactions/import/confirm/`,
     ]);
+    expect(fetchMock.mock.calls[1]?.[1]).toEqual(
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
   });
 });
-

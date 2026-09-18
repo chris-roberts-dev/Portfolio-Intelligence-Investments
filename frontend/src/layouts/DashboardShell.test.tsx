@@ -45,12 +45,30 @@ describe("DashboardShell", () => {
     expect(screen.getAllByRole("link", { name: "Portfolios" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Market data" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Allocation Lab" }).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("link", { name: "Activity and Transactions" }).length,
+    ).toBeGreaterThan(0);
 
     expect(
       screen.getAllByRole("link", { name: "Portfolios" }).some(
         (link) => link.getAttribute("aria-current") === "page",
       ),
     ).toBe(true);
+  });
+
+
+  it("marks Activity and Transactions active and keeps navigation keyboard focusable", () => {
+    renderShell("/activity?portfolio=00000000-0000-0000-0000-000000000002");
+
+    const activityLinks = screen.getAllByRole("link", {
+      name: "Activity and Transactions",
+    });
+    expect(
+      activityLinks.some((link) => link.getAttribute("aria-current") === "page"),
+    ).toBe(true);
+
+    activityLinks[0]?.focus();
+    expect(activityLinks[0]).toHaveFocus();
   });
 
   it("provides an accessible mobile navigation drawer", () => {

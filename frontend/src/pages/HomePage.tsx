@@ -567,7 +567,7 @@ export function HomePage() {
         <Link
           to={
             selectedPortfolio
-              ? `/portfolios/${encodeURIComponent(selectedPortfolio.id)}/manage?range=${encodeURIComponent(range)}`
+              ? `/activity?portfolio=${encodeURIComponent(selectedPortfolio.id)}`
               : "/portfolios"
           }
           className="inline-flex min-h-10 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm outline-none hover:bg-blue-700 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"

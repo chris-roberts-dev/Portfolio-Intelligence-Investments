@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router";
 
 import { ProtectedRoute } from "./features/auth/ProtectedRoute";
+import { ActivityPage } from "./pages/ActivityPage";
 import { AllocationLabPage } from "./pages/AllocationLabPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { HoldingDetailPage } from "./pages/HoldingDetailPage";
@@ -37,6 +38,7 @@ export function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/portfolios" element={<PortfoliosPage />} />
+        <Route path="/activity" element={<ActivityPage />} />
 
         <Route
           path="/portfolios/:portfolioId/dashboard"

@@ -28,10 +28,10 @@ def test_openapi_exposes_portfolio_and_transaction_ingestion_contracts() -> None
         == "portfolio_benchmark_update"
     )
     assert paths["/api/v1/assets/"]["get"]["operationId"] == "asset_catalog_list"
-    assert (
-        paths["/api/v1/portfolios/{portfolio_id}/transactions/"]["post"]["operationId"]
-        == "portfolio_transaction_create"
-    )
+    transaction_collection = paths["/api/v1/portfolios/{portfolio_id}/transactions/"]
+    assert transaction_collection["get"]["operationId"] == "portfolio_transaction_list"
+    assert set(transaction_collection["get"]["responses"]) == {"200", "404"}
+    assert transaction_collection["post"]["operationId"] == "portfolio_transaction_create"
     assert (
         paths["/api/v1/portfolios/{portfolio_id}/transactions/import/preview/"]["post"][
             "operationId"

@@ -146,3 +146,29 @@ export async function apiPatch<T, TBody extends object>(
   return parseResponse<T>(response);
 }
 
+export async function apiDelete(
+  path: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<void> {
+  const csrfToken = csrfTokenFromCookie();
+  const headers = new Headers({
+    Accept: "application/json",
+  });
+
+  if (csrfToken !== null) {
+    headers.set("X-CSRFToken", csrfToken);
+  }
+
+  const response = await fetch(`${apiBaseUrl()}${path}`, {
+    method: "DELETE",
+    credentials: "include",
+    headers,
+    signal: options.signal,
+  });
+
+  if (response.ok && response.status === 204) {
+    return;
+  }
+
+  await parseResponse<unknown>(response);
+}

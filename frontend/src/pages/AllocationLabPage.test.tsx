@@ -377,6 +377,11 @@ describe("AllocationLabPage", () => {
     renderPage();
 
     await waitForLabReady();
+    const heading = screen.getByRole("heading", { name: "Allocation Lab" });
+    expect(heading.closest('[data-ui="domain-page-header"]')).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Run optimization" }),
+    ).toHaveClass("bg-blue-600");
     expect(
       screen.getByRole("button", { name: "Ad hoc portfolio" }),
     ).toHaveAttribute("aria-pressed", "true");

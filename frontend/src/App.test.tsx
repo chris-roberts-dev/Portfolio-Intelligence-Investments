@@ -152,6 +152,27 @@ describe("App authentication routing", () => {
   });
 
 
+  it("protects the Activity & Transactions route", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({ authenticated: false, user: null }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+      ),
+    );
+
+    renderApp("/activity");
+
+    expect(
+      await screen.findByRole("heading", { name: "Sign in" }),
+    ).toBeInTheDocument();
+  });
+
   it("protects the Allocation Lab route", async () => {
     vi.stubGlobal(
       "fetch",
@@ -357,8 +378,14 @@ describe("App authentication routing", () => {
     renderApp(`/portfolios/${portfolioId}/manage?range=6M`);
 
     expect(
-      await screen.findByRole("heading", { name: "Add transaction" }),
+      await screen.findByRole("heading", { name: "Transaction work" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Open Activity & Transactions" }),
+    ).toHaveAttribute(
+      "href",
+      `/activity?portfolio=${portfolioId}`,
+    );
     expect(
       screen.getByRole("link", { name: "Portfolio dashboard" }),
     ).toHaveAttribute(
