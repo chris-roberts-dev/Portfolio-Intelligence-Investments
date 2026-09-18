@@ -114,6 +114,18 @@ a {
     width: 100% !important;
   }
 
+  .portfolio-report-detail-header {
+    break-after: avoid;
+  }
+
+  .portfolio-report-page table {
+    min-width: 0 !important;
+  }
+
+  .portfolio-report-page button {
+    display: none !important;
+  }
+
   .portfolio-report-page thead {
     display: table-header-group;
   }

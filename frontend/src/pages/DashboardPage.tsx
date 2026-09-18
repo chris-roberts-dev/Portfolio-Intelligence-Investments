@@ -4,6 +4,12 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { StatePanel } from "../components/ui/StatePanel";
 import { DashboardOverview } from "../features/dashboard/DashboardOverview";
 import {
+  isPortfolioReportView,
+  PORTFOLIO_REPORT_VIEW_LABELS,
+  PortfolioReportSubview,
+  type PortfolioReportView,
+} from "../features/dashboard/PortfolioReportSubview";
+import {
   resolveDashboardDateRange,
   type DashboardRange,
 } from "../features/dashboard/dateRange";
@@ -36,6 +42,14 @@ const ALL_DASHBOARD_RANGES: readonly DashboardRange[] = [
   "5Y",
   "ALL",
 ];
+const REPORT_NAVIGATION: readonly PortfolioReportView[] = [
+  "report",
+  "holdings",
+  "allocation",
+  "performance",
+  "risk",
+  "transactions",
+];
 
 function isDashboardRange(value: string | null): value is DashboardRange {
   return value !== null && ALL_DASHBOARD_RANGES.includes(value as DashboardRange);
@@ -66,6 +80,10 @@ export function DashboardPage() {
   );
   const rangeParam = searchParams.get("range");
   const range: DashboardRange = isDashboardRange(rangeParam) ? rangeParam : "YTD";
+  const viewParam = searchParams.get("view");
+  const view: PortfolioReportView = isPortfolioReportView(viewParam)
+    ? viewParam
+    : "report";
 
   const request = useMemo(() => {
     if (!portfolioId || !selectedPortfolio) {
@@ -84,7 +102,8 @@ export function DashboardPage() {
     };
   }, [portfolioId, range, selectedPortfolio]);
 
-  const snapshotQuery = useDashboardSnapshot(request);
+  const snapshotRequest = view === "transactions" ? null : request;
+  const snapshotQuery = useDashboardSnapshot(snapshotRequest);
   const snapshot = snapshotQuery.data;
   const inceptionAt =
     selectedPortfolio?.ledger_inception_at ?? selectedPortfolio?.created_at ?? null;
@@ -96,17 +115,38 @@ export function DashboardPage() {
   const reportEndExclusive =
     snapshot?.snapshot.effective_end_exclusive ?? request?.end ?? null;
   const reportEnd = reportEndExclusive ? inclusiveEndDate(reportEndExclusive) : null;
+  const viewLabel = PORTFOLIO_REPORT_VIEW_LABELS[view];
+
+  function viewHref(targetView: PortfolioReportView): string {
+    if (!portfolioId) {
+      return "/portfolios";
+    }
+
+    const next = new URLSearchParams(searchParams);
+    next.set("range", range);
+    next.set("view", targetView);
+    return `/portfolios/${encodeURIComponent(portfolioId)}/dashboard?${next.toString()}`;
+  }
 
   const header = (
     <div className="portfolio-report-header mx-auto w-full max-w-[1440px] px-4 py-4 sm:px-6 lg:px-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="portfolio-report-screen-only flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
-            <Link to="/portfolios" className="outline-none hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-blue-500">
+            <Link
+              to="/portfolios"
+              className="outline-none hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
               Portfolios
             </Link>
             <span aria-hidden="true">/</span>
             <span>Portfolio report</span>
+            {view !== "report" ? (
+              <>
+                <span aria-hidden="true">/</span>
+                <span>{viewLabel}</span>
+              </>
+            ) : null}
           </div>
 
           {portfoliosQuery.data && portfoliosQuery.data.length > 0 ? (
@@ -116,8 +156,11 @@ export function DashboardPage() {
                 value={portfolioId ?? ""}
                 onChange={(event: ChangeEvent<HTMLSelectElement>) => {
                   if (event.target.value) {
+                    const next = new URLSearchParams(searchParams);
+                    next.set("range", range);
+                    next.set("view", view);
                     navigate(
-                      `/portfolios/${event.target.value}/dashboard?range=${range}`,
+                      `/portfolios/${encodeURIComponent(event.target.value)}/dashboard?${next.toString()}`,
                     );
                   }
                 }}
@@ -136,7 +179,7 @@ export function DashboardPage() {
             {selectedPortfolio?.name ?? "Portfolio report"}
           </h1>
           <p className="mt-1 text-sm text-slate-600">
-            Portfolio report
+            {viewLabel}
             {reportStart && reportEnd
               ? ` · ${formatDate(reportStart)} – ${formatDate(reportEnd)}`
               : ""}
@@ -153,6 +196,11 @@ export function DashboardPage() {
               <>
                 <span aria-hidden="true">·</span>
                 <span>Provider: {snapshot.snapshot.provider}</span>
+              </>
+            ) : view === "transactions" ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>Source: transaction ledger</span>
               </>
             ) : null}
           </p>
@@ -172,6 +220,7 @@ export function DashboardPage() {
                 onClick={() => {
                   const next = new URLSearchParams(searchParams);
                   next.set("range", option);
+                  next.set("view", view);
                   setSearchParams(next, { replace: true });
                 }}
                 className={`min-h-9 rounded-lg px-3 text-xs font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-blue-500 ${
@@ -217,29 +266,23 @@ export function DashboardPage() {
         className="portfolio-report-screen-only mt-4 flex gap-1 overflow-x-auto border-b border-slate-200"
         aria-label="Portfolio report sections"
       >
-        {[
-          ["#report-summary", "Report"],
-          ["#holdings", "Holdings"],
-          ["#allocation", "Allocation"],
-          ["#performance", "Performance"],
-          ["#risk", "Risk"],
-        ].map(([href, label]) => (
-          <a
-            key={href}
-            href={href}
-            className="whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 outline-none hover:border-blue-300 hover:text-blue-800 focus-visible:ring-2 focus-visible:ring-blue-500"
-          >
-            {label}
-          </a>
-        ))}
-        {portfolioId ? (
-          <Link
-            to={`/activity?portfolio=${encodeURIComponent(portfolioId)}`}
-            className="whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 outline-none hover:border-blue-300 hover:text-blue-800 focus-visible:ring-2 focus-visible:ring-blue-500"
-          >
-            Transactions
-          </Link>
-        ) : null}
+        {REPORT_NAVIGATION.map((targetView) => {
+          const isActive = view === targetView;
+          return (
+            <Link
+              key={targetView}
+              to={viewHref(targetView)}
+              aria-current={isActive ? "page" : undefined}
+              className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                isActive
+                  ? "border-blue-600 text-blue-800"
+                  : "border-transparent text-slate-600 hover:border-blue-300 hover:text-blue-800"
+              }`}
+            >
+              {PORTFOLIO_REPORT_VIEW_LABELS[targetView]}
+            </Link>
+          );
+        })}
       </nav>
     </div>
   );
@@ -252,6 +295,10 @@ export function DashboardPage() {
             <p>
               Data as of {formatDateTime(snapshot.snapshot.current_data_as_of)} · Snapshot {snapshot.snapshot.snapshot_id}
             </p>
+          </div>
+        ) : view === "transactions" ? (
+          <div className="portfolio-report-print-context mb-4 hidden text-xs text-slate-600">
+            <p>Data source: authoritative transaction ledger.</p>
           </div>
         ) : null}
 
@@ -269,7 +316,7 @@ export function DashboardPage() {
               </Link>
             }
           />
-        ) : (
+        ) : view === "report" ? (
           <DashboardOverview
             snapshot={snapshot}
             isLoading={snapshotQuery.isPending || portfoliosQuery.isPending}
@@ -286,7 +333,36 @@ export function DashboardPage() {
               void snapshotQuery.refetch();
             }}
           />
-        )}
+        ) : portfolioId ? (
+          <PortfolioReportSubview
+            view={view}
+            portfolioId={portfolioId}
+            snapshot={snapshot}
+            isLoading={
+              view === "transactions"
+                ? portfoliosQuery.isPending
+                : snapshotQuery.isPending || portfoliosQuery.isPending
+            }
+            isFetching={snapshotQuery.isFetching && snapshot !== undefined}
+            error={
+              view === "transactions"
+                ? portfoliosQuery.error instanceof Error
+                  ? portfoliosQuery.error
+                  : null
+                : snapshotQuery.error instanceof Error
+                  ? snapshotQuery.error
+                  : portfoliosQuery.error instanceof Error
+                    ? portfoliosQuery.error
+                    : null
+            }
+            onRetry={() => {
+              void portfoliosQuery.refetch();
+              if (view !== "transactions") {
+                void snapshotQuery.refetch();
+              }
+            }}
+          />
+        ) : null}
 
         {snapshot ? (
           <footer className="portfolio-report-footer mt-5 border-t border-slate-200 pt-4 text-xs leading-5 text-slate-500">
@@ -298,6 +374,12 @@ export function DashboardPage() {
             </div>
             <p className="mt-2">
               Returns are time-weighted where performance is available. Contributions and withdrawals are external cash flows and are not presented as investment gains or losses. Report currency {snapshot.snapshot.base_currency}.
+            </p>
+          </footer>
+        ) : view === "transactions" ? (
+          <footer className="portfolio-report-footer mt-5 border-t border-slate-200 pt-4 text-xs leading-5 text-slate-500">
+            <p>
+              Transactions are displayed from the complete persisted ledger and are not filtered by the selected report period. Transaction editing, deletion, and reconciliation are not exposed by the current contracts.
             </p>
           </footer>
         ) : null}
