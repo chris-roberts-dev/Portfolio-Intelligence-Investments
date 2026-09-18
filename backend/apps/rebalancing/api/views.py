@@ -222,10 +222,15 @@ def historical_rebalance_comparison_list_view(request: Request) -> Response:
             provider_name=configuration.default_provider,
             resolver=get_asset_resolver(),
             provider=provider,
+            trading_calendar=get_trading_session_calendar(),
         )
     except Portfolio.DoesNotExist:
         return Response({"code": "NOT_FOUND", "detail": "Portfolio not found."}, status=404)
-    except (ProviderConfigurationError, ProviderRegistryError) as exc:
+    except (
+        ProviderConfigurationError,
+        ProviderRegistryError,
+        TradingSessionCalendarUnavailable,
+    ) as exc:
         return Response({"code": "DEPENDENCY_UNAVAILABLE", "detail": str(exc)}, status=503)
     except RebalancingApplicationError as exc:
         if exc.code == "TARGET_ALLOCATION_NOT_FOUND":

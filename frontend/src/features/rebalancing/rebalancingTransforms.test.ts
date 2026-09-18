@@ -78,8 +78,8 @@ function comparisonFixture(): HistoricalRebalanceComparison {
       total_cost: 3,
     },
     snapshots: [
-      { trade_date: "2026-01-02", total_value: values[0] ?? 100, cash_value: 0, period_return: null, lines: [] },
-      { trade_date: "2026-01-05", total_value: values[1] ?? 101, cash_value: 0, period_return: 0.01, lines: [] },
+      { trade_date: "2026-01-02", total_value: values[0] ?? 100, cash_value: 0, period_return: null, growth_of_100: values[0] ?? 100, lines: [] },
+      { trade_date: "2026-01-05", total_value: values[1] ?? 101, cash_value: 0, period_return: 0.01, growth_of_100: values[1] ?? 101, lines: [] },
     ],
     events: [],
     warnings: [],
@@ -112,7 +112,26 @@ function comparisonFixture(): HistoricalRebalanceComparison {
         commission_rate: 0,
         slippage_rate: 0,
         turnover_convention: "persisted backend convention",
-        later_actual_ledger_activity: "ignored_after_initial_state",
+        later_actual_ledger_activity: "ignored_by_hypothetical_policies",
+        actual_portfolio_return_method: "TIME_WEIGHTED",
+        actual_portfolio_series_basis: "normalized_growth_of_100_from_same_period_twr",
+      },
+      actual_portfolio: {
+        available: true,
+        return_method: "TIME_WEIGHTED",
+        period_start: "2026-01-02",
+        period_end: "2026-01-05",
+        starting_portfolio_value: 100,
+        ending_portfolio_value: 100.5,
+        cumulative_return: 0.005,
+        growth_of_100_start: 100,
+        growth_of_100_end: 100.5,
+        series: [
+          { trade_date: "2026-01-02", portfolio_value: 100, cumulative_return: 0, growth_of_100: 100 },
+          { trade_date: "2026-01-05", portfolio_value: 100.5, cumulative_return: 0.005, growth_of_100: 100.5 },
+        ],
+        provenance: { provider: "csv", retrieved_at: "2026-01-05T23:00:00Z", price_field: "adjusted_close" },
+        warnings: [],
       },
       policies: [policy("annual", [100, 101]), policy("quarterly", [100, 102]), policy("threshold", [100, 103])],
       provenance: {
@@ -183,6 +202,7 @@ describe("rebalancing presentation transforms", () => {
 
   it("reshapes persisted snapshot values for charts without recomputing performance", () => {
     expect(historicalValueChartSeries(comparisonFixture())).toEqual([
+      { name: "actual", points: [["2026-01-02", 100], ["2026-01-05", 100.5]] },
       { name: "annual", points: [["2026-01-02", 100], ["2026-01-05", 101]] },
       { name: "quarterly", points: [["2026-01-02", 100], ["2026-01-05", 102]] },
       { name: "threshold", points: [["2026-01-02", 100], ["2026-01-05", 103]] },

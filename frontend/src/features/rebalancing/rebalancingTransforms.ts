@@ -70,13 +70,50 @@ export function tradeLines(lines: readonly RebalanceLine[]): RebalanceLine[] {
 export function historicalValueChartSeries(
   comparison: HistoricalRebalanceComparison,
 ): RebalanceValueChartSeries[] {
-  return comparison.result.policies.map((policy) => ({
+  const policySeries = comparison.result.policies.map((policy) => ({
     name: policy.name,
     points: policy.snapshots.map((snapshot) => [
       snapshot.trade_date,
-      snapshot.total_value,
-    ]),
+      snapshot.growth_of_100 ??
+        (policy.summary.initial_value > 0
+          ? (100 * snapshot.total_value) / policy.summary.initial_value
+          : 100),
+    ] as [string, number]),
   }));
+  const actual = comparison.result.actual_portfolio;
+
+  if (!actual?.available || actual.series.length === 0) {
+    return policySeries;
+  }
+
+  return [
+    {
+      name: "actual",
+      points: actual.series.map((point) => [
+        point.trade_date,
+        point.growth_of_100 ?? legacyActualGrowthOf100(actual, point.comparable_value),
+      ] as [string, number]),
+    },
+    ...policySeries,
+  ];
+}
+
+function legacyActualGrowthOf100(
+  actual: HistoricalRebalanceComparison["result"]["actual_portfolio"],
+  comparableValue: number | undefined,
+): number {
+  if (
+    actual === undefined ||
+    actual === null ||
+    comparableValue === undefined ||
+    actual.comparable_initial_value === undefined ||
+    actual.comparable_initial_value === null ||
+    actual.comparable_initial_value <= 0
+  ) {
+    return 100;
+  }
+
+  return (100 * comparableValue) / actual.comparable_initial_value;
 }
 
 export function policyByName(

@@ -14,6 +14,7 @@ from apps.accounts.models import User
 from apps.assets.models import Asset, AssetType
 from apps.market_data.contracts import (
     MarketBarBatchResult,
+    MarketBarQueryError,
     MarketBarStatus,
     NormalizedMarketBarQuery,
     normalize_market_bar_query,
@@ -27,6 +28,11 @@ from apps.portfolios.services.current_valuation import (
     CurrentValuationError,
     TradingSessionCalendar,
     value_owned_portfolio,
+)
+from apps.portfolios.services.daily_performance import (
+    DailyPerformanceError,
+    DailyPortfolioPerformanceResult,
+    calculate_owned_portfolio_daily_performance,
 )
 from apps.portfolios.services.ledger import replay_portfolio_ledger
 from apps.rebalancing.models import (
@@ -279,14 +285,16 @@ def create_historical_rebalance_comparison(
     provider_name: str,
     resolver: AssetResolver,
     provider: MarketDataProvider,
+    trading_calendar: TradingSessionCalendar,
     executor: MarketBarQueryExecutor = execute_market_bar_query,
 ) -> HistoricalRebalanceComparison:
     """Persist an annual/quarterly/threshold historical comparison.
 
-    The initial simulated state is the authoritative owned-portfolio ledger state
-    observable at ``00:00 UTC`` on ``period_start``. Later real ledger activity is
-    deliberately excluded from the hypothetical comparison and surfaced as a
-    structured warning when present.
+    The initial simulated state is the authoritative owned-portfolio end-of-day
+    ledger state on ``period_start``. Later real ledger activity is deliberately
+    excluded from each hypothetical policy. The actual-portfolio baseline replays
+    real ledger activity through the canonical daily TWR service over the exact
+    aligned comparison period.
     """
     if command.period_start >= command.period_end:
         raise RebalancingApplicationError(
@@ -300,7 +308,7 @@ def create_historical_rebalance_comparison(
         portfolio=portfolio,
         target_allocation_id=command.target_allocation_id,
     )
-    initial_as_of = datetime.combine(command.period_start, time.min, tzinfo=UTC)
+    initial_as_of = datetime.combine(command.period_start, time.max, tzinfo=UTC)
     end_exclusive = datetime.combine(command.period_end + timedelta(days=1), time.min, tzinfo=UTC)
     ledger = replay_portfolio_ledger(portfolio, as_of=initial_as_of)
 
@@ -394,15 +402,31 @@ def create_historical_rebalance_comparison(
             {
                 "code": "ACTUAL_LEDGER_ACTIVITY_IGNORED",
                 "message": (
-                    "The hypothetical historical comparison starts from the ledger state at "
-                    f"{initial_as_of.isoformat()} and does not apply later real portfolio "
-                    "transactions during the comparison period."
+                    "Hypothetical rebalancing policies start from the portfolio ledger state "
+                    f"at {initial_as_of.isoformat()} and do not apply later real portfolio "
+                    "transactions. The actual-portfolio TWR baseline does replay those "
+                    "transactions."
                 ),
             }
         )
 
+    actual_portfolio, actual_warnings = _build_actual_portfolio_baseline(
+        user=user,
+        portfolio=portfolio,
+        period_start=engine_result.period_start,
+        period_end=engine_result.period_end,
+        aligned_dates=engine_result.aligned_dates,
+        provider_name=provider_name,
+        resolver=resolver,
+        provider=provider,
+        trading_calendar=trading_calendar,
+        executor=executor,
+    )
+    warnings.extend(actual_warnings)
+
     result = _serialize_historical_result(
         engine_result,
+        actual_portfolio=actual_portfolio,
         provider=batch.meta.provider,
         retrieved_at=batch.meta.retrieved_at,
         requested_period_start=command.period_start,
@@ -462,6 +486,7 @@ def _engine_targets(target: TargetAllocation) -> tuple[TargetWeight, ...]:
 def _serialize_historical_result(
     result: HistoricalRebalanceComparisonResult,
     *,
+    actual_portfolio: dict[str, object],
     provider: str,
     retrieved_at: datetime,
     requested_period_start: date,
@@ -492,10 +517,17 @@ def _serialize_historical_result(
             "commission_rate": result.commission_rate,
             "slippage_rate": result.slippage_rate,
             "turnover_convention": result.turnover_convention,
-            "later_actual_ledger_activity": "ignored_after_initial_state",
+            "later_actual_ledger_activity": "ignored_by_hypothetical_policies",
+            "actual_portfolio_return_method": "TIME_WEIGHTED",
+            "actual_portfolio_series_basis": "normalized_growth_of_100_from_same_period_twr",
         },
+        "actual_portfolio": actual_portfolio,
         "policies": [
-            _serialize_policy_result(policy_result) for policy_result in result.policy_results
+            _serialize_policy_result(
+                policy_result,
+                actual_cumulative_return=_actual_cumulative_return(actual_portfolio),
+            )
+            for policy_result in result.policy_results
         ],
         "provenance": {
             "provider": provider,
@@ -507,8 +539,17 @@ def _serialize_historical_result(
     }
 
 
+def _actual_cumulative_return(actual_portfolio: dict[str, object]) -> float | None:
+    value = actual_portfolio.get("cumulative_return")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
 def _serialize_policy_result(
     result: HistoricalRebalancePolicyResult,
+    *,
+    actual_cumulative_return: float | None,
 ) -> dict[str, object]:
     policy = result.policy
     return {
@@ -519,6 +560,11 @@ def _serialize_policy_result(
             "initial_value": result.initial_value,
             "ending_value": result.ending_value,
             "cumulative_return": result.cumulative_return,
+            "growth_of_100_ending": _growth_of_100(result.cumulative_return),
+            "return_difference_pp_vs_actual": _return_difference_pp_vs_actual(
+                result.cumulative_return,
+                actual_cumulative_return,
+            ),
             "rebalance_count": result.rebalance_count,
             "trade_count": result.trade_count,
             "maximum_absolute_drift": result.maximum_absolute_drift,
@@ -533,6 +579,10 @@ def _serialize_policy_result(
                 "total_value": snapshot.total_value,
                 "cash_value": snapshot.cash_value,
                 "period_return": snapshot.period_return,
+                "growth_of_100": _normalized_policy_growth_of_100(
+                    snapshot.total_value,
+                    result.initial_value,
+                ),
                 "lines": [
                     {
                         "asset_id": str(line.asset_id) if line.asset_id is not None else None,
@@ -579,6 +629,278 @@ def _serialize_policy_result(
         ],
         "warnings": [_serialize_warning(warning) for warning in result.warnings],
     }
+
+
+def _build_actual_portfolio_baseline(
+    *,
+    user: User,
+    portfolio: Portfolio,
+    period_start: date,
+    period_end: date,
+    aligned_dates: tuple[date, ...],
+    provider_name: str,
+    resolver: AssetResolver,
+    provider: MarketDataProvider,
+    trading_calendar: TradingSessionCalendar,
+    executor: MarketBarQueryExecutor,
+) -> tuple[dict[str, object], list[dict[str, str]]]:
+    """Build actual owned-portfolio TWR over the exact aligned comparison period.
+
+    The canonical daily-performance service receives every trading session between
+    the simulation's aligned start and end dates. The persisted chart series is
+    then sampled only on the simulation-aligned dates so the actual and
+    hypothetical paths share the same x-axis without weakening daily TWR cash-flow
+    semantics.
+    """
+    try:
+        valuation_times = _actual_performance_valuation_times(
+            period_start=period_start,
+            period_end=period_end,
+            trading_calendar=trading_calendar,
+        )
+        performance = calculate_owned_portfolio_daily_performance(
+            user=user,
+            portfolio_id=portfolio.id,
+            valuation_times=valuation_times,
+            provider_name=provider_name,
+            resolver=resolver,
+            provider=provider,
+            trading_calendar=trading_calendar,
+            executor=executor,
+        )
+    except (DailyPerformanceError, MarketBarQueryError) as exc:
+        message = (
+            "Actual portfolio performance is unavailable for the exact aligned "
+            f"comparison period: {exc}"
+        )
+        warning = {
+            "code": "ACTUAL_PORTFOLIO_COMPARISON_UNAVAILABLE",
+            "message": message,
+        }
+        return (
+            _unavailable_actual_portfolio(
+                period_start=period_start,
+                period_end=period_end,
+                provider=provider_name,
+                message=message,
+            ),
+            [warning],
+        )
+
+    if performance.twr is None:
+        detail = next(
+            (
+                warning.message
+                for warning in performance.warnings
+                if warning.code.value == "TWR_UNDEFINED"
+            ),
+            "daily TWR is undefined for the aligned comparison period.",
+        )
+        message = (
+            f"Actual portfolio performance is unavailable for an exact comparison because {detail}"
+        )
+        warning = {
+            "code": "ACTUAL_PORTFOLIO_COMPARISON_UNAVAILABLE",
+            "message": message,
+        }
+        return (
+            _unavailable_actual_portfolio(
+                period_start=period_start,
+                period_end=period_end,
+                provider=performance.provenance.provider,
+                message=message,
+                performance=performance,
+            ),
+            [warning],
+        )
+
+    raw_values = {
+        valuation.as_of.date(): (
+            float(valuation.total_value) if valuation.total_value is not None else None
+        )
+        for valuation in performance.valuations
+    }
+    cumulative_returns: dict[date, float] = {performance.twr.period_start: 0.0}
+    growth_factor = 1.0
+    for observation in performance.twr.daily_returns:
+        growth_factor *= 1.0 + observation.simple_return
+        cumulative_returns[observation.valuation_date] = growth_factor - 1.0
+
+    series: list[dict[str, object]] = []
+    for trade_date in aligned_dates:
+        cumulative_return = cumulative_returns.get(trade_date)
+        portfolio_value = raw_values.get(trade_date)
+        if cumulative_return is None or portfolio_value is None:
+            message = (
+                "Actual portfolio performance is unavailable for an exact comparison "
+                f"because the aligned date {trade_date.isoformat()} lacks a complete "
+                "daily valuation/TWR observation."
+            )
+            warning = {
+                "code": "ACTUAL_PORTFOLIO_COMPARISON_UNAVAILABLE",
+                "message": message,
+            }
+            return (
+                _unavailable_actual_portfolio(
+                    period_start=period_start,
+                    period_end=period_end,
+                    provider=performance.provenance.provider,
+                    message=message,
+                    performance=performance,
+                ),
+                [warning],
+            )
+        series.append(
+            {
+                "trade_date": trade_date.isoformat(),
+                "portfolio_value": portfolio_value,
+                "cumulative_return": cumulative_return,
+                "growth_of_100": _growth_of_100(cumulative_return),
+            }
+        )
+
+    starting_value = raw_values.get(performance.twr.period_start)
+    ending_value = raw_values.get(performance.twr.period_end)
+    return (
+        {
+            "available": True,
+            "return_method": "TIME_WEIGHTED",
+            "period_start": performance.twr.period_start.isoformat(),
+            "period_end": performance.twr.period_end.isoformat(),
+            "starting_portfolio_value": starting_value,
+            "ending_portfolio_value": ending_value,
+            "cumulative_return": performance.twr.cumulative_return,
+            "growth_of_100_start": 100.0,
+            "growth_of_100_end": _growth_of_100(performance.twr.cumulative_return),
+            "series": series,
+            "provenance": {
+                "provider": performance.provenance.provider,
+                "retrieved_at": (
+                    performance.provenance.retrieved_at.isoformat()
+                    if performance.provenance.retrieved_at is not None
+                    else None
+                ),
+                "price_field": performance.provenance.price_field,
+            },
+            "warnings": _serialize_actual_performance_warnings(performance),
+        },
+        [],
+    )
+
+
+def _actual_performance_valuation_times(
+    *,
+    period_start: date,
+    period_end: date,
+    trading_calendar: TradingSessionCalendar,
+) -> tuple[datetime, ...]:
+    if period_start >= period_end:
+        raise DailyPerformanceError(
+            "actual portfolio comparison period must contain at least two dates"
+        )
+
+    calendar_days = (period_end - period_start).days
+    sessions = trading_calendar.sessions_through(
+        period_end,
+        count=calendar_days + 1,
+    )
+    selected = tuple(session for session in sessions if period_start <= session <= period_end)
+    if len(selected) < 2:
+        raise DailyPerformanceError(
+            "actual portfolio comparison period must contain at least two trading sessions"
+        )
+    if selected[0] != period_start or selected[-1] != period_end:
+        raise DailyPerformanceError(
+            "actual portfolio comparison endpoints must be trading sessions"
+        )
+    return tuple(datetime.combine(session, time.max, tzinfo=UTC) for session in selected)
+
+
+def _unavailable_actual_portfolio(
+    *,
+    period_start: date,
+    period_end: date,
+    provider: str,
+    message: str,
+    performance: DailyPortfolioPerformanceResult | None = None,
+) -> dict[str, object]:
+    return {
+        "available": False,
+        "return_method": "TIME_WEIGHTED",
+        "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(),
+        "starting_portfolio_value": None,
+        "ending_portfolio_value": None,
+        "cumulative_return": None,
+        "growth_of_100_start": None,
+        "growth_of_100_end": None,
+        "series": [],
+        "provenance": {
+            "provider": (performance.provenance.provider if performance is not None else provider),
+            "retrieved_at": (
+                performance.provenance.retrieved_at.isoformat()
+                if performance is not None and performance.provenance.retrieved_at is not None
+                else None
+            ),
+            "price_field": (
+                performance.provenance.price_field if performance is not None else "adjusted_close"
+            ),
+        },
+        "warnings": [
+            *_serialize_actual_performance_warnings(performance),
+            {
+                "code": "ACTUAL_PORTFOLIO_COMPARISON_UNAVAILABLE",
+                "message": message,
+            },
+        ],
+    }
+
+
+def _serialize_actual_performance_warnings(
+    performance: DailyPortfolioPerformanceResult | None,
+) -> list[dict[str, str]]:
+    if performance is None:
+        return []
+
+    serialized: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for warning in performance.warnings:
+        item = (warning.code.value, warning.message)
+        if item in seen:
+            continue
+        seen.add(item)
+        serialized.append(
+            {
+                "code": warning.code.value,
+                "message": warning.message,
+            }
+        )
+    return serialized
+
+
+def _growth_of_100(cumulative_return: float) -> float:
+    return 100.0 * (1.0 + cumulative_return)
+
+
+def _normalized_policy_growth_of_100(
+    portfolio_value: float,
+    initial_value: float,
+) -> float:
+    if initial_value <= 0.0:
+        raise RebalancingApplicationError(
+            "Historical policy initial value must be positive for normalized growth."
+        )
+    return 100.0 * portfolio_value / initial_value
+
+
+def _return_difference_pp_vs_actual(
+    simulated_cumulative_return: float,
+    actual_cumulative_return: float | None,
+) -> float | None:
+    """Return simulated minus actual same-period cumulative return in percentage points."""
+    if actual_cumulative_return is None:
+        return None
+    return (simulated_cumulative_return - actual_cumulative_return) * 100.0
 
 
 def _serialize_rebalance_line(line: RebalanceLine) -> dict[str, object]:

@@ -118,6 +118,39 @@ export interface HistoricalRebalanceAssumptions {
   slippage_rate: number;
   turnover_convention: string;
   later_actual_ledger_activity: string;
+  actual_portfolio_return_method?: string;
+  actual_portfolio_series_basis?: string;
+}
+
+export interface HistoricalActualPortfolioPoint {
+  trade_date: string;
+  portfolio_value: number | null;
+  cumulative_return: number;
+  growth_of_100?: number;
+  // Legacy persisted comparisons may still carry this field.
+  comparable_value?: number;
+}
+
+export interface HistoricalActualPortfolio {
+  available: boolean;
+  return_method: string;
+  period_start: string | null;
+  period_end: string | null;
+  starting_portfolio_value: number | null;
+  ending_portfolio_value: number | null;
+  cumulative_return: number | null;
+  growth_of_100_start?: number | null;
+  growth_of_100_end?: number | null;
+  // Legacy persisted comparisons may still carry these fields.
+  comparable_initial_value?: number | null;
+  comparable_ending_value?: number | null;
+  series: HistoricalActualPortfolioPoint[];
+  provenance: {
+    provider: string;
+    retrieved_at: string | null;
+    price_field: string;
+  };
+  warnings: RebalancingWarning[];
 }
 
 export interface HistoricalRebalanceSnapshotLine {
@@ -135,6 +168,7 @@ export interface HistoricalRebalanceSnapshot {
   total_value: number;
   cash_value: number;
   period_return: number | null;
+  growth_of_100?: number;
   lines: HistoricalRebalanceSnapshotLine[];
 }
 
@@ -166,6 +200,8 @@ export interface HistoricalRebalancePolicySummary {
   initial_value: number;
   ending_value: number;
   cumulative_return: number;
+  growth_of_100_ending?: number;
+  return_difference_pp_vs_actual?: number | null;
   rebalance_count: number;
   trade_count: number;
   maximum_absolute_drift: number;
@@ -203,6 +239,7 @@ export interface HistoricalRebalanceResult {
   };
   target_weights: HistoricalTargetWeight[];
   assumptions: HistoricalRebalanceAssumptions;
+  actual_portfolio?: HistoricalActualPortfolio | null;
   policies: HistoricalRebalancePolicyResult[];
   provenance: HistoricalRebalanceProvenance;
 }

@@ -50,6 +50,12 @@ test("owned portfolio can create an optimization target and compare deterministi
   await expect(results.getByRole("button", { name: "Annual" })).toBeVisible();
   await expect(results.getByRole("button", { name: "Quarterly" })).toBeVisible();
   await expect(results.getByRole("button", { name: "Drift threshold" })).toBeVisible();
+  await expect(results.getByText("Actual portfolio")).toBeVisible();
+  await expect(
+    results.getByRole("region", { name: "Actual portfolio comparison baseline" }),
+  ).toBeVisible();
+  await expect(results.getByRole("heading", { name: "Growth of $100" })).toBeVisible();
+  await expect(results.getByText("Vs actual")).toBeVisible();
   await expect(results.getByText("Turnover")).toBeVisible();
   await expect(results.getByText("Max drift")).toBeVisible();
   await expect(results.getByText("Total costs")).toBeVisible();
@@ -60,6 +66,9 @@ test("owned portfolio can create an optimization target and compare deterministi
   await expect(
     page.getByRole("region", { name: "Historical comparison assumptions and provenance" }),
   ).toContainText("csv");
+  await expect(
+    page.getByRole("region", { name: "Historical comparison assumptions and provenance" }),
+  ).toContainText("TIME_WEIGHTED");
   await expect(page.getByLabel("Rebalancing warnings")).toContainText(
     "Actual ledger activity ignored",
   );

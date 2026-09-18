@@ -59,6 +59,35 @@ function formatNumber(value: number, digits = 2): string {
   }).format(value);
 }
 
+function formatPercentagePoints(value: number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return "Not available";
+  }
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${formatNumber(value, 2)} pp`;
+}
+
+function policyComparisonSentence(
+  policy: HistoricalRebalancePolicyResult | null,
+): string | null {
+  if (policy === null) {
+    return null;
+  }
+
+  const difference = policy.summary.return_difference_pp_vs_actual;
+  if (difference === null || difference === undefined) {
+    return null;
+  }
+  const label = `${policyLabel(policy.name)} rebalancing`;
+  if (difference > 0) {
+    return `${label} outperformed the actual portfolio by ${formatNumber(Math.abs(difference), 2)} pp.`;
+  }
+  if (difference < 0) {
+    return `${label} underperformed the actual portfolio by ${formatNumber(Math.abs(difference), 2)} pp.`;
+  }
+  return `${label} matched the actual portfolio return.`;
+}
+
 function policyLabel(name: string): string {
   switch (name) {
     case "annual":
@@ -155,7 +184,7 @@ function TargetCreationPanel({
   const error = createTarget.error instanceof Error ? errorCopy(createTarget.error) : null;
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+    <section className="h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="text-lg font-semibold text-slate-950">Create target from optimization</h2>
       <p className="mt-1 text-sm leading-6 text-slate-600">
         Successful portfolio-derived Allocation Lab results can be saved as immutable target
@@ -176,7 +205,7 @@ function TargetCreationPanel({
           }
         />
       ) : (
-        <form className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end" onSubmit={submit}>
+        <form className="mt-4 grid gap-4" onSubmit={submit}>
           <label className="text-xs font-semibold text-slate-700">
             Successful optimization run
             <select
@@ -206,7 +235,7 @@ function TargetCreationPanel({
           <button
             type="submit"
             disabled={selectedRun === null || !name.trim() || createTarget.isPending}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white outline-none hover:bg-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50"
+            className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white outline-none hover:bg-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50"
           >
             {createTarget.isPending ? "Saving target…" : "Save target"}
           </button>
@@ -278,6 +307,89 @@ function CurrentSimulationPanel({
   );
 }
 
+function ActualPortfolioBaselineSummary({
+  comparison,
+  currency,
+}: {
+  comparison: HistoricalRebalanceComparison;
+  currency: string;
+}) {
+  const actual = comparison.result.actual_portfolio;
+
+  if (!actual?.available) {
+    return (
+      <StatePanel
+        title="Actual portfolio baseline unavailable"
+        message="The hypothetical rebalancing policies are available, but an exact same-period actual portfolio TWR baseline could not be calculated. Review the comparison warnings for the missing valuation evidence."
+      />
+    );
+  }
+
+  return (
+    <section
+      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+      aria-label="Actual portfolio comparison baseline"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+            Actual portfolio baseline
+          </p>
+          <p className="mt-1 text-sm text-slate-700">
+            Canonical daily time-weighted return over the exact aligned comparison period.
+          </p>
+        </div>
+        <span className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+          {actual.period_start} to {actual.period_end}
+        </span>
+      </div>
+      <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <dt className="text-xs text-slate-500">Actual start value</dt>
+          <dd className="mt-1 text-lg font-semibold tabular-nums text-slate-950">
+            {formatCurrency(
+              actual.starting_portfolio_value === null
+                ? null
+                : String(actual.starting_portfolio_value),
+              currency,
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-slate-500">Actual end value</dt>
+          <dd className="mt-1 text-lg font-semibold tabular-nums text-slate-950">
+            {formatCurrency(
+              actual.ending_portfolio_value === null
+                ? null
+                : String(actual.ending_portfolio_value),
+              currency,
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-slate-500">Same-period actual TWR</dt>
+          <dd className="mt-1 text-lg font-semibold tabular-nums text-slate-950">
+            {formatPercent(actual.cumulative_return)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-slate-500">Growth of $100</dt>
+          <dd className="mt-1 text-lg font-semibold tabular-nums text-slate-950">
+            {actual.growth_of_100_end === null || actual.growth_of_100_end === undefined
+              ? "Not available"
+              : formatCurrency(String(actual.growth_of_100_end), currency)}
+          </dd>
+        </div>
+      </dl>
+      <p className="mt-3 text-xs leading-5 text-slate-600">
+        Actual start/end values are account valuations. Growth of $100 is a normalized
+        return index used only to compare paths. The TWR shown here is not a since-inception
+        return unless this comparison begins at portfolio inception.
+      </p>
+    </section>
+  );
+}
+
 function PolicySummaryTable({
   comparison,
   currency,
@@ -289,15 +401,20 @@ function PolicySummaryTable({
   selectedPolicy: string;
   onSelectPolicy: (name: string) => void;
 }) {
+  const actual = comparison.result.actual_portfolio;
+
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[980px] border-collapse text-left text-sm">
-        <caption className="sr-only">Historical rebalancing policy comparison</caption>
+      <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
+        <caption className="sr-only">
+          Actual portfolio and historical rebalancing policy comparison
+        </caption>
         <thead>
           <tr className="border-b border-slate-200 text-xs text-slate-500">
             <th className="py-2 pr-4 font-semibold">Policy</th>
             <th className="py-2 pr-4 font-semibold">Ending value</th>
-            <th className="py-2 pr-4 font-semibold">Return</th>
+            <th className="py-2 pr-4 font-semibold">Period return</th>
+            <th className="py-2 pr-4 font-semibold">Vs actual</th>
             <th className="py-2 pr-4 font-semibold">Rebalances</th>
             <th className="py-2 pr-4 font-semibold">Trades</th>
             <th className="py-2 pr-4 font-semibold">Turnover</th>
@@ -306,6 +423,28 @@ function PolicySummaryTable({
           </tr>
         </thead>
         <tbody>
+          {actual ? (
+            <tr className="border-b border-slate-200 bg-slate-50">
+              <th className="py-3 pr-4 font-semibold text-slate-950">Actual portfolio</th>
+              <td className="py-3 pr-4 tabular-nums">
+                {formatCurrency(
+                  actual.ending_portfolio_value === null
+                    ? null
+                    : String(actual.ending_portfolio_value),
+                  currency,
+                )}
+              </td>
+              <td className="py-3 pr-4 tabular-nums">
+                {formatPercent(actual.cumulative_return)}
+              </td>
+              <td className="py-3 pr-4 font-semibold text-slate-700">Baseline</td>
+              <td className="py-3 pr-4 text-slate-500">—</td>
+              <td className="py-3 pr-4 text-slate-500">—</td>
+              <td className="py-3 pr-4 text-slate-500">—</td>
+              <td className="py-3 pr-4 text-slate-500">—</td>
+              <td className="py-3 pr-4 text-slate-500">—</td>
+            </tr>
+          ) : null}
           {comparison.result.policies.map((policy) => (
             <tr key={policy.name} className="border-b border-slate-100">
               <th className="py-3 pr-4">
@@ -318,17 +457,35 @@ function PolicySummaryTable({
                   {policyLabel(policy.name)}
                 </button>
               </th>
-              <td className="py-3 pr-4 tabular-nums">{formatCurrency(String(policy.summary.ending_value), currency)}</td>
-              <td className="py-3 pr-4 tabular-nums">{formatPercent(policy.summary.cumulative_return)}</td>
+              <td className="py-3 pr-4 tabular-nums">
+                {formatCurrency(String(policy.summary.ending_value), currency)}
+              </td>
+              <td className="py-3 pr-4 tabular-nums">
+                {formatPercent(policy.summary.cumulative_return)}
+              </td>
+              <td className="py-3 pr-4 tabular-nums font-semibold">
+                {formatPercentagePoints(policy.summary.return_difference_pp_vs_actual)}
+              </td>
               <td className="py-3 pr-4 tabular-nums">{policy.summary.rebalance_count}</td>
               <td className="py-3 pr-4 tabular-nums">{policy.summary.trade_count}</td>
-              <td className="py-3 pr-4 tabular-nums">{formatNumber(policy.summary.turnover, 3)}</td>
-              <td className="py-3 pr-4 tabular-nums">{formatPercent(policy.summary.maximum_absolute_drift)}</td>
-              <td className="py-3 pr-4 tabular-nums">{formatCurrency(String(policy.summary.total_cost), currency)}</td>
+              <td className="py-3 pr-4 tabular-nums">
+                {formatNumber(policy.summary.turnover, 3)}
+              </td>
+              <td className="py-3 pr-4 tabular-nums">
+                {formatPercent(policy.summary.maximum_absolute_drift)}
+              </td>
+              <td className="py-3 pr-4 tabular-nums">
+                {formatCurrency(String(policy.summary.total_cost), currency)}
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+      <p className="mt-3 text-xs leading-5 text-slate-500">
+        Percentage-point differences compare each hypothetical policy return with the actual
+        portfolio's canonical TWR over this same aligned period. Ending dollar values are
+        account/simulation values and are not used to calculate the percentage-point comparison.
+      </p>
     </div>
   );
 }
@@ -505,6 +662,7 @@ export function RebalancingLabPage() {
   );
   const activeComparison = openedComparison ?? createComparison.data ?? null;
   const activePolicy = policyByName(activeComparison, selectedPolicy);
+  const activeComparisonSentence = policyComparisonSentence(activePolicy);
 
   const assetLabels = useMemo(
     () => new Map((assetsQuery.data ?? []).map((asset) => [asset.id, asset.symbol] as const)),
@@ -646,7 +804,7 @@ export function RebalancingLabPage() {
 
   return (
     <DashboardShell header={header}>
-      <main className="mx-auto w-full max-w-[1440px] space-y-5 px-4 pb-10 sm:px-6 lg:px-8">
+      <main className="mx-auto w-full max-w-[1800px] space-y-6 px-3 pb-10 sm:px-4 lg:px-5 xl:px-6">
         {loading ? (
           <div aria-label="Loading Rebalancing Lab" className="space-y-5">
             <Skeleton className="h-36 w-full rounded-2xl" />
@@ -662,9 +820,10 @@ export function RebalancingLabPage() {
           />
         ) : (
           <>
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="grid gap-5 xl:grid-cols-4" aria-label="Rebalancing workflow controls">
+            <section className="h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-950">Portfolio and target</h2>
-              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div className="mt-4 grid gap-4">
                 <label className="text-xs font-semibold text-slate-700">
                   Owned portfolio
                   <select
@@ -704,8 +863,8 @@ export function RebalancingLabPage() {
               />
             ) : null}
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-              <div className="flex flex-wrap items-end justify-between gap-4">
+            <section className="h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-950">Current drift and simulated rebalance</h2>
                   <p className="mt-1 text-sm text-slate-600">Uses the server's current valuation and target-allocation engine. Trade notionals are simulations, not orders.</p>
@@ -714,7 +873,7 @@ export function RebalancingLabPage() {
                   type="button"
                   onClick={() => void runCurrentSimulation()}
                   disabled={!portfolioId || !targetId || createSimulation.isPending}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white outline-none hover:bg-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50"
+                  className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white outline-none hover:bg-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50"
                 >
                   {createSimulation.isPending ? "Simulating…" : "Simulate current rebalance"}
                 </button>
@@ -722,36 +881,47 @@ export function RebalancingLabPage() {
 
               {simulationError ? <div className="mt-4"><StatePanel title={simulationError.title} message={simulationError.message} tone="error" /></div> : null}
               {createSimulation.data ? (
-                <>
-                  <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <div><dt className="text-xs text-slate-500">Investable value</dt><dd className="mt-1 text-lg font-semibold tabular-nums">{formatCurrency(String(createSimulation.data.result.total_investable_value), selectedPortfolio?.base_currency ?? "USD")}</dd></div>
-                    <div><dt className="text-xs text-slate-500">Threshold</dt><dd className="mt-1 text-lg font-semibold tabular-nums">{formatPercent(createSimulation.data.result.rules.threshold)}</dd></div>
-                    <div><dt className="text-xs text-slate-500">Threshold status</dt><dd className="mt-1 text-lg font-semibold">{createSimulation.data.result.rules.threshold_triggered ? "Triggered" : "Within threshold"}</dd></div>
-                    <div><dt className="text-xs text-slate-500">Valuation provenance</dt><dd className="mt-1 text-sm font-semibold">{createSimulation.data.provider} · {createSimulation.data.price_field}</dd></div>
-                  </dl>
-                  <CurrentSimulationPanel lines={createSimulation.data.result.lines} currency={selectedPortfolio?.base_currency ?? "USD"} assetLabel={assetLabel} />
-                  {createSimulation.data.warnings.length > 0 ? <div className="mt-4">{warningPanel(createSimulation.data.warnings)}</div> : null}
-                </>
+                <dl className="mt-5 grid grid-cols-2 gap-4">
+                  <div><dt className="text-xs text-slate-500">Investable value</dt><dd className="mt-1 text-base font-semibold tabular-nums">{formatCurrency(String(createSimulation.data.result.total_investable_value), selectedPortfolio?.base_currency ?? "USD")}</dd></div>
+                  <div><dt className="text-xs text-slate-500">Threshold</dt><dd className="mt-1 text-base font-semibold tabular-nums">{formatPercent(createSimulation.data.result.rules.threshold)}</dd></div>
+                  <div><dt className="text-xs text-slate-500">Status</dt><dd className="mt-1 text-sm font-semibold">{createSimulation.data.result.rules.threshold_triggered ? "Triggered" : "Within threshold"}</dd></div>
+                  <div><dt className="text-xs text-slate-500">Valuation</dt><dd className="mt-1 text-sm font-semibold">{createSimulation.data.provider} · {createSimulation.data.price_field}</dd></div>
+                </dl>
               ) : (
-                <div className="mt-4"><StatePanel title="Run a current simulation" message="Select a saved target to see authoritative current weights, target weights, drift, and simulated trade notionals." /></div>
+                <p className="mt-4 text-sm leading-6 text-slate-600">Run the current simulation to calculate authoritative drift and simulated trade notionals.</p>
               )}
             </section>
 
-            <form className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" onSubmit={(event) => void runHistoricalComparison(event)}>
+            <form className="h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" onSubmit={(event) => void runHistoricalComparison(event)}>
               <h2 className="text-lg font-semibold text-slate-950">Historical rule comparison</h2>
               <p className="mt-1 text-sm text-slate-600">Annual, quarterly, and absolute drift-threshold policies share the same initial state, aligned adjusted-close history, costs, and target allocation.</p>
-              <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+              <div className="mt-5 grid grid-cols-2 gap-3">
                 <label className="text-xs font-semibold text-slate-700">Period start<input aria-label="Historical period start" type="date" value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-blue-500" /></label>
                 <label className="text-xs font-semibold text-slate-700">Period end<input aria-label="Historical period end" type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-blue-500" /></label>
                 <label className="text-xs font-semibold text-slate-700">Drift threshold<input aria-label="Absolute drift threshold" type="number" min="0" max="1" step="0.001" value={threshold} onChange={(event) => setThreshold(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-blue-500" /></label>
                 <label className="text-xs font-semibold text-slate-700">Commission rate<input aria-label="Commission rate" type="number" min="0" max="1" step="0.0001" value={commissionRate} onChange={(event) => setCommissionRate(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-blue-500" /></label>
                 <label className="text-xs font-semibold text-slate-700">Slippage rate<input aria-label="Slippage rate" type="number" min="0" max="1" step="0.0001" value={slippageRate} onChange={(event) => setSlippageRate(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-blue-500" /></label>
-                <label className="flex items-center gap-2 self-end rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700"><input type="checkbox" checked={includeMonthly} onChange={(event) => setIncludeMonthly(event.target.checked)} />Include monthly</label>
+                <label className="col-span-2 flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700"><input type="checkbox" checked={includeMonthly} onChange={(event) => setIncludeMonthly(event.target.checked)} />Include monthly</label>
               </div>
               {formError ? <p className="mt-4 text-sm font-medium text-rose-700" role="alert">{formError}</p> : null}
-              <button type="submit" disabled={!portfolioId || !targetId || createComparison.isPending} className="mt-5 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white outline-none hover:bg-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50">{createComparison.isPending ? "Running historical comparison…" : "Run historical comparison"}</button>
+              <button type="submit" disabled={!portfolioId || !targetId || createComparison.isPending} className="mt-5 w-full rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white outline-none hover:bg-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50">{createComparison.isPending ? "Running historical comparison…" : "Run historical comparison"}</button>
               {comparisonError ? <div className="mt-4"><StatePanel title={comparisonError.title} message={comparisonError.message} tone="error" /></div> : null}
             </form>
+            </div>
+
+            {createSimulation.data ? (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-label="Current rebalance simulation detail">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">Current simulation</p>
+                    <h2 className="mt-1 text-lg font-semibold text-slate-950">Current allocation, drift, and simulated trades</h2>
+                  </div>
+                  <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">Simulation · not an order</span>
+                </div>
+                <CurrentSimulationPanel lines={createSimulation.data.result.lines} currency={selectedPortfolio?.base_currency ?? "USD"} assetLabel={assetLabel} />
+                {createSimulation.data.warnings.length > 0 ? <div className="mt-4">{warningPanel(createSimulation.data.warnings)}</div> : null}
+              </section>
+            ) : null}
 
             {historicalForPortfolio.length > 0 ? (
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -772,8 +942,20 @@ export function RebalancingLabPage() {
                     <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">Persisted comparison</p><h2 className="mt-1 text-lg font-semibold text-slate-950">Policy outcomes</h2><p className="mt-1 text-sm text-slate-600">{activeComparison.result.period_start} to {activeComparison.result.period_end} aligned market history</p></div>
                     <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">Historical simulation · not investment advice</span>
                   </div>
+                  {activeComparisonSentence ? (
+                    <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950" role="status">
+                      <p className="font-semibold">{activeComparisonSentence}</p>
+                      <p className="mt-1 text-blue-900">Percentage-point differences are calculated by the backend from cumulative policy return minus actual portfolio TWR.</p>
+                    </div>
+                  ) : null}
+                  <div className="mt-5">
+                    <ActualPortfolioBaselineSummary
+                      comparison={activeComparison}
+                      currency={selectedPortfolio?.base_currency ?? "USD"}
+                    />
+                  </div>
                   <div className="mt-5"><PolicySummaryTable comparison={activeComparison} currency={selectedPortfolio?.base_currency ?? "USD"} selectedPolicy={activePolicy?.name ?? selectedPolicy} onSelectPolicy={setSelectedPolicy} /></div>
-                  <div className="mt-6"><h3 className="text-sm font-semibold text-slate-950">Portfolio value by policy</h3><p className="mt-1 text-sm text-slate-600">Values come directly from each policy's persisted snapshot series.</p><div className="mt-3"><RebalanceValueComparisonChart comparison={activeComparison} currency={selectedPortfolio?.base_currency ?? "USD"} /></div></div>
+                  <div className="mt-6"><h3 className="text-sm font-semibold text-slate-950">Growth of $100</h3><p className="mt-1 text-sm text-slate-600">All lines are normalized to 100 at the first aligned observation. The actual line follows canonical same-period TWR; hypothetical lines follow persisted simulated portfolio values.</p><div className="mt-3"><RebalanceValueComparisonChart comparison={activeComparison} currency={selectedPortfolio?.base_currency ?? "USD"} /></div></div>
                 </section>
 
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-label="Historical comparison assumptions and provenance">
@@ -787,6 +969,7 @@ export function RebalancingLabPage() {
                     <div><dt className="text-xs text-slate-500">Aligned period</dt><dd className="mt-1 font-semibold text-slate-900">{activeComparison.result.period_start} to {activeComparison.result.period_end}</dd></div>
                     <div><dt className="text-xs text-slate-500">Commission / slippage</dt><dd className="mt-1 font-semibold text-slate-900">{formatPercent(activeComparison.result.assumptions.commission_rate)} / {formatPercent(activeComparison.result.assumptions.slippage_rate)}</dd></div>
                     <div><dt className="text-xs text-slate-500">Engine version</dt><dd className="mt-1 font-semibold text-slate-900">{activeComparison.result.provenance.engine_version}</dd></div>
+                    <div><dt className="text-xs text-slate-500">Actual portfolio return</dt><dd className="mt-1 font-semibold text-slate-900">{activeComparison.result.actual_portfolio?.return_method ?? "Not available"} · same aligned period</dd></div>
                   </dl>
                   <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700"><p className="font-semibold text-slate-900">Turnover convention</p><p className="mt-1">{activeComparison.result.assumptions.turnover_convention}</p><p className="mt-2">Later actual ledger activity: {activeComparison.result.assumptions.later_actual_ledger_activity.replaceAll("_", " ")}.</p></div>
                 </section>

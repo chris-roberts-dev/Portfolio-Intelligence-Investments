@@ -32,6 +32,8 @@ interface RebalanceValueComparisonChartProps {
 
 function policyLabel(name: string): string {
   switch (name) {
+    case "actual":
+      return "Actual portfolio";
     case "annual":
       return "Annual";
     case "quarterly":
@@ -65,7 +67,7 @@ export function RebalanceValueComparisonChart({
       aria: {
         enabled: true,
         description:
-          "Historical portfolio value for each deterministic rebalancing policy.",
+          "Normalized growth of 100 for the actual portfolio and each deterministic rebalancing policy over the same comparison period.",
       },
       grid: {
         left: 12,
@@ -114,7 +116,7 @@ export function RebalanceValueComparisonChart({
         showSymbol: false,
         connectNulls: false,
         smooth: false,
-        lineStyle: { width: 2 },
+        lineStyle: { width: item.name === "actual" ? 3 : 2 },
         data: item.points,
       })),
     };
@@ -127,16 +129,8 @@ export function RebalanceValueComparisonChart({
   }
 
   const dates = comparison.result.aligned_dates;
-  const valuesByPolicy = new Map(
-    comparison.result.policies.map((policy) => [
-      policy.name,
-      new Map(
-        policy.snapshots.map((snapshot) => [
-          snapshot.trade_date,
-          snapshot.total_value,
-        ]),
-      ),
-    ]),
+  const valuesBySeries = new Map(
+    series.map((item) => [item.name, new Map(item.points)]),
   );
 
   return (
@@ -146,7 +140,7 @@ export function RebalanceValueComparisonChart({
         className="h-72 w-full sm:h-80"
         role="img"
         tabIndex={0}
-        aria-label="Historical rebalancing policy portfolio value comparison"
+        aria-label="Growth of 100 for actual portfolio and historical rebalancing policies"
       />
       <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
         <summary className="cursor-pointer font-medium text-slate-700">
@@ -157,9 +151,9 @@ export function RebalanceValueComparisonChart({
             <thead>
               <tr className="border-b border-slate-200 text-slate-500">
                 <th className="py-2 pr-4 font-semibold">Date</th>
-                {comparison.result.policies.map((policy) => (
-                  <th key={policy.name} className="py-2 pr-4 font-semibold">
-                    {policyLabel(policy.name)}
+                {series.map((item) => (
+                  <th key={item.name} className="py-2 pr-4 font-semibold">
+                    {policyLabel(item.name)}
                   </th>
                 ))}
               </tr>
@@ -168,17 +162,17 @@ export function RebalanceValueComparisonChart({
               {dates.map((date) => (
                 <tr key={date} className="border-b border-slate-100 last:border-0">
                   <td className="py-2 pr-4 text-slate-700">{formatDate(date)}</td>
-                  {comparison.result.policies.map((policy) => (
-                    <td key={policy.name} className="py-2 pr-4 text-slate-700">
-                      {(() => {
-                        const value = valuesByPolicy.get(policy.name)?.get(date);
-                        return formatCurrency(
+                  {series.map((item) => {
+                    const value = valuesBySeries.get(item.name)?.get(date);
+                    return (
+                      <td key={item.name} className="py-2 pr-4 text-slate-700">
+                        {formatCurrency(
                           value === undefined ? null : String(value),
                           currency,
-                        );
-                      })()}
-                    </td>
-                  ))}
+                        )}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>

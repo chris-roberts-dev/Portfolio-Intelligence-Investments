@@ -638,15 +638,92 @@ export function AllocationLabPage() {
   if (portfoliosQuery.isPending || assetCatalogQuery.isPending) {
     return (
       <DashboardShell header={header}>
-        <LabSkeleton />
+        <div className="mx-auto w-full max-w-[1800px] px-4 pb-10 sm:px-6 lg:px-8">
+          <LabSkeleton />
+        </div>
       </DashboardShell>
     );
   }
 
   return (
     <DashboardShell header={header}>
-      <div className="space-y-5">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="mx-auto w-full max-w-[1800px] space-y-5 px-4 pb-10 sm:px-6 lg:px-8">
+        <section
+          className="rounded-2xl border border-blue-200 border-l-4 border-l-blue-500 bg-blue-50/70 p-5 shadow-sm sm:p-6"
+          aria-labelledby="allocation-methodology-heading"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
+                Canonical analytical note
+              </p>
+              <h2
+                id="allocation-methodology-heading"
+                className="mt-1 text-lg font-semibold text-slate-950"
+              >
+                Methodology
+              </h2>
+              <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-700">
+                These rules are fixed by the server-side optimization engine. They are shown
+                here as read-only context so configuration choices remain distinct from the
+                canonical mathematics used for every persisted run.
+              </p>
+            </div>
+            <span className="rounded-full border border-blue-200 bg-white/80 px-3 py-1 text-xs font-semibold text-blue-800">
+              Read-only methodology
+            </span>
+          </div>
+
+          <dl className="mt-5 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4">
+            <div>
+              <dt className="text-xs text-blue-700">Historical price field</dt>
+              <dd className="mt-1 font-semibold text-slate-950">adjusted_close</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-blue-700">Annualization factor</dt>
+              <dd className="mt-1 font-semibold text-slate-950">252</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-blue-700">Expected returns</dt>
+              <dd className="mt-1 font-semibold text-slate-950">
+                Mean daily simple return × 252
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-blue-700">Covariance</dt>
+              <dd className="mt-1 font-semibold text-slate-950">
+                Complete-case sample covariance, ddof=1 × 252
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-blue-700">Position policy</dt>
+              <dd className="mt-1 font-semibold text-slate-950">
+                Long-only · unlevered · fully invested
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-blue-700">Provider</dt>
+              <dd className="mt-1 font-semibold text-slate-950">
+                {activeRun?.provenance.provider ?? "Server-configured at execution"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-blue-700">Engine version</dt>
+              <dd className="mt-1 font-semibold text-slate-950">
+                {activeRun?.provenance.engine_version ?? "Recorded on every run"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-blue-700">Method version</dt>
+              <dd className="mt-1 font-semibold text-slate-950">
+                {activeRun?.provenance.method_version ?? "Recorded on every run"}
+              </dd>
+            </div>
+          </dl>
+        </section>
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] xl:items-start">
+          <section className="h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <h2 className="text-lg font-semibold text-slate-950">Allocation source</h2>
           <p className="mt-1 text-sm text-slate-600">
             Ad hoc analysis does not create a real portfolio. Existing-portfolio import is read-only.
@@ -751,14 +828,14 @@ export function AllocationLabPage() {
           ) : null}
         </section>
 
-        <form className="space-y-5" onSubmit={submitOptimization}>
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <h2 className="text-lg font-semibold text-slate-950">Configuration</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              These are supported user-controlled inputs. Canonical methodology remains fixed below.
-            </p>
+          <form className="min-w-0" onSubmit={submitOptimization}>
+            <section className="h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <h2 className="text-lg font-semibold text-slate-950">Configuration</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                These are supported user-controlled inputs. Canonical methodology is summarized in the note above.
+              </p>
 
-            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <div className="mt-5 grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
               <label className="block text-xs font-semibold text-slate-700">
                 Analysis start
                 <input
@@ -948,61 +1025,9 @@ export function AllocationLabPage() {
             >
               {createRun.isPending ? "Running optimization…" : "Run optimization"}
             </button>
-          </section>
-        </form>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          <h2 className="text-lg font-semibold text-slate-950">Methodology</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            These canonical analytical rules are intentionally read-only.
-          </p>
-          <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <dt className="text-xs text-slate-500">Historical price field</dt>
-              <dd className="mt-1 font-semibold text-slate-900">adjusted_close</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500">Annualization factor</dt>
-              <dd className="mt-1 font-semibold text-slate-900">252</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500">Expected returns</dt>
-              <dd className="mt-1 font-semibold text-slate-900">
-                Mean daily simple return × 252
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500">Covariance</dt>
-              <dd className="mt-1 font-semibold text-slate-900">
-                Complete-case sample covariance, ddof=1 × 252
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500">Position policy</dt>
-              <dd className="mt-1 font-semibold text-slate-900">
-                Long-only · unlevered · fully invested
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500">Provider</dt>
-              <dd className="mt-1 font-semibold text-slate-900">
-                {activeRun?.provenance.provider ?? "Server-configured at execution"}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500">Engine version</dt>
-              <dd className="mt-1 font-semibold text-slate-900">
-                {activeRun?.provenance.engine_version ?? "Recorded on every run"}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500">Method version</dt>
-              <dd className="mt-1 font-semibold text-slate-900">
-                {activeRun?.provenance.method_version ?? "Recorded on every run"}
-              </dd>
-            </div>
-          </dl>
-        </section>
+            </section>
+          </form>
+        </div>
 
         {createRun.error instanceof Error ? (
           <StatePanel

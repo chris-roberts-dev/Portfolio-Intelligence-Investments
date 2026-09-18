@@ -146,14 +146,18 @@ const simulation = {
 };
 
 function policy(name: string, schedule: string | null, endingValue: number) {
+  const initialValue = 1_000_000;
+  const cumulativeReturn = endingValue / initialValue - 1;
   return {
     name,
     schedule,
     threshold: name === "threshold" ? 0.05 : null,
     summary: {
-      initial_value: 100000,
+      initial_value: initialValue,
       ending_value: endingValue,
-      cumulative_return: endingValue / 100000 - 1,
+      cumulative_return: cumulativeReturn,
+      growth_of_100_ending: 100 * (1 + cumulativeReturn),
+      return_difference_pp_vs_actual: (cumulativeReturn - 0.604) * 100,
       rebalance_count: 1,
       trade_count: 2,
       maximum_absolute_drift: 0.08,
@@ -165,9 +169,10 @@ function policy(name: string, schedule: string | null, endingValue: number) {
     snapshots: [
       {
         trade_date: "2026-02-02",
-        total_value: 100000,
-        cash_value: 60000,
+        total_value: initialValue,
+        cash_value: 600000,
         period_return: null,
+        growth_of_100: 100,
         lines: [
           {
             asset_id: AAPL_ID,
@@ -183,8 +188,9 @@ function policy(name: string, schedule: string | null, endingValue: number) {
       {
         trade_date: "2026-04-01",
         total_value: endingValue,
-        cash_value: 1000,
-        period_return: 0.01,
+        cash_value: 10000,
+        period_return: cumulativeReturn,
+        growth_of_100: 100 * (endingValue / initialValue),
         lines: [
           {
             asset_id: AAPL_ID,
@@ -255,12 +261,35 @@ const comparison = {
       commission_rate: 0.001,
       slippage_rate: 0.002,
       turnover_convention: "gross executed fill notional divided by pre-trade portfolio value",
-      later_actual_ledger_activity: "ignored_after_initial_state",
+      later_actual_ledger_activity: "ignored_by_hypothetical_policies",
+      actual_portfolio_return_method: "TIME_WEIGHTED",
+      actual_portfolio_series_basis: "normalized_growth_of_100_from_same_period_twr",
+    },
+    actual_portfolio: {
+      available: true,
+      return_method: "TIME_WEIGHTED",
+      period_start: "2026-02-02",
+      period_end: "2026-04-01",
+      starting_portfolio_value: 1000000,
+      ending_portfolio_value: 1604000,
+      cumulative_return: 0.604,
+      growth_of_100_start: 100,
+      growth_of_100_end: 160.4,
+      series: [
+        { trade_date: "2026-02-02", portfolio_value: 1000000, cumulative_return: 0, growth_of_100: 100 },
+        { trade_date: "2026-04-01", portfolio_value: 1604000, cumulative_return: 0.604, growth_of_100: 160.4 },
+      ],
+      provenance: {
+        provider: "csv",
+        retrieved_at: "2026-09-16T15:00:00Z",
+        price_field: "adjusted_close",
+      },
+      warnings: [],
     },
     policies: [
-      policy("annual", "ANNUAL", 105000),
-      policy("quarterly", "QUARTERLY", 106000),
-      policy("threshold", null, 107000),
+      policy("annual", "ANNUAL", 1695200),
+      policy("quarterly", "QUARTERLY", 1660000),
+      policy("threshold", null, 1710000),
     ],
     provenance: {
       provider: "csv",
@@ -273,7 +302,7 @@ const comparison = {
   warnings: [
     {
       code: "ACTUAL_LEDGER_ACTIVITY_IGNORED",
-      message: "Later real portfolio transactions were not applied to this hypothetical path.",
+      message: "Hypothetical policies do not apply later real transactions. The actual-portfolio TWR baseline does replay them.",
     },
   ],
   created_at: "2026-09-16T16:10:00Z",
@@ -430,6 +459,17 @@ describe("RebalancingLabPage", () => {
     expect(screen.getByRole("button", { name: "Quarterly" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Drift threshold" })).toBeInTheDocument();
     expect(screen.getByText("Historical value comparison chart")).toBeInTheDocument();
+    expect(screen.getByText("Actual portfolio")).toBeInTheDocument();
+    expect(screen.getByText("Actual start value")).toBeInTheDocument();
+    expect(screen.getByText("Actual end value")).toBeInTheDocument();
+    expect(screen.getByText("$1,000,000.00")).toBeInTheDocument();
+    expect(screen.getAllByText("$1,604,000.00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("+60.40%").length).toBeGreaterThan(0);
+    expect(screen.getByText("+9.12 pp")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Growth of $100" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Annual rebalancing outperformed the actual portfolio by 9.12 pp."),
+    ).toBeInTheDocument();
 
     const eventTable = screen.getByRole("table", {
       name: "Rebalance decision and execution events",
@@ -439,6 +479,6 @@ describe("RebalancingLabPage", () => {
     expect(screen.getByRole("region", { name: "Historical comparison assumptions and provenance" })).toHaveTextContent("adjusted_close");
     expect(screen.getByRole("region", { name: "Historical comparison assumptions and provenance" })).toHaveTextContent("csv");
     expect(screen.getByLabelText("Rebalancing warnings")).toHaveTextContent("Actual ledger activity ignored");
-    expect(screen.getByLabelText("Rebalancing warnings")).toHaveTextContent("not applied");
+    expect(screen.getByLabelText("Rebalancing warnings")).toHaveTextContent("does replay");
   });
 });
