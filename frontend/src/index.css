@@ -46,3 +46,89 @@ a {
     transition-duration: 0.01ms !important;
   }
 }
+@media print {
+  @page {
+    size: landscape;
+    margin: 10mm;
+  }
+
+  html,
+  body {
+    min-width: 0;
+    background: #ffffff !important;
+  }
+
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .app-shell-navigation,
+  .app-shell-topbar,
+  .portfolio-report-screen-only,
+  .portfolio-report-secondary {
+    display: none !important;
+  }
+
+  .app-shell-content {
+    padding-left: 0 !important;
+  }
+
+  .app-shell-header {
+    position: static !important;
+    border-bottom: 0 !important;
+    background: #ffffff !important;
+    backdrop-filter: none !important;
+  }
+
+  .app-shell-main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .portfolio-report-header {
+    max-width: none !important;
+    padding: 0 0 5mm !important;
+    border-bottom: 1px solid #cbd5e1;
+  }
+
+  .portfolio-report-print-title {
+    margin-top: 0 !important;
+  }
+
+  .portfolio-report-print-context {
+    display: block !important;
+  }
+
+  .portfolio-report-page {
+    max-width: none !important;
+  }
+
+  .portfolio-report-card,
+  .portfolio-report-page section {
+    break-inside: avoid;
+    box-shadow: none !important;
+  }
+
+  .portfolio-report-page table {
+    width: 100% !important;
+  }
+
+  .portfolio-report-page thead {
+    display: table-header-group;
+  }
+
+  .portfolio-report-page a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+
+  .portfolio-report-page canvas,
+  .portfolio-report-page svg {
+    max-width: 100% !important;
+  }
+
+  .portfolio-report-footer {
+    break-inside: avoid;
+  }
+}

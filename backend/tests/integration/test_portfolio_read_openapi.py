@@ -65,3 +65,8 @@ def test_openapi_schema_exposes_owned_portfolio_read_contracts() -> None:
     assert "AnalyticalResultProvenance" in component_schemas
     assert "PortfolioValidationError" in component_schemas
     assert "PortfolioApiError" in component_schemas
+    portfolio_summary = component_schemas["PortfolioSummary"]
+    ledger_inception = portfolio_summary["properties"]["ledger_inception_at"]
+    assert ledger_inception["type"] == "string"
+    assert ledger_inception["format"] == "date-time"
+    assert ledger_inception["nullable"] is True

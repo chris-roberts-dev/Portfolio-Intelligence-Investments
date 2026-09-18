@@ -893,6 +893,7 @@ export function PortfolioAnalysisPage() {
     const dates = resolveDashboardDateRange(
       range,
       selectedPortfolio.created_at,
+      selectedPortfolio.ledger_inception_at,
     );
 
     return {

@@ -132,7 +132,7 @@ async function selectCsvFile(fileContents = "csv") {
   ).toBeInTheDocument();
 
   const previewButton = screen.getByRole("button", {
-    name: "Validate and preview",
+    name: "Resolve tickers and preview",
   });
 
   await waitFor(() => {
@@ -267,6 +267,110 @@ describe("ActivityPage", () => {
       `/api/v1/portfolios/${PORTFOLIO_ID}/transactions/`,
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+
+
+  it("resolves a user-entered ticker to canonical identity before manual transaction submission", async () => {
+    document.cookie = "csrftoken=activity-resolve; path=/";
+    const msftId = "00000000-0000-0000-0000-000000000012";
+    const msft = {
+      id: msftId,
+      symbol: "MSFT",
+      name: "Microsoft Corp.",
+      asset_type: "STOCK",
+      exchange: "NASDAQ",
+      currency: "USD",
+    };
+    let resolved = false;
+    let submittedBody: Record<string, unknown> | null = null;
+
+    baseFetch((url, init) => {
+      if (url.endsWith("/api/v1/assets/") && init?.method === "GET") {
+        return jsonResponse(resolved ? [asset, msft] : [asset]);
+      }
+
+      if (url.endsWith("/api/v1/assets/resolve/") && init?.method === "POST") {
+        resolved = true;
+        return jsonResponse({
+          provider: "yfinance",
+          outcomes: [
+            {
+              symbol: "MSFT",
+              status: "RESOLVED",
+              asset: msft,
+              warning: null,
+            },
+          ],
+        });
+      }
+
+      if (
+        url.endsWith(`/api/v1/portfolios/${PORTFOLIO_ID}/transactions/`) &&
+        init?.method === "POST"
+      ) {
+        submittedBody = JSON.parse(String(init.body)) as Record<string, unknown>;
+        return jsonResponse(
+          {
+            id: "00000000-0000-0000-0000-000000000080",
+            portfolio_id: PORTFOLIO_ID,
+            transaction_type: "BUY",
+            asset_id: msftId,
+            asset_symbol: "MSFT",
+            occurred_at: "2026-09-18T14:00:00Z",
+            source_sequence: 0,
+            quantity: "1.000000000000",
+            price: "100.00000000",
+            fees: "0.00000000",
+            cash_amount: null,
+            created_at: "2026-09-18T14:00:01Z",
+          },
+          201,
+        );
+      }
+
+      return null;
+    });
+
+    renderPage();
+    fireEvent.change(await screen.findByLabelText("Transaction type"), {
+      target: { value: "BUY" },
+    });
+    fireEvent.change(screen.getByLabelText("Ticker symbol"), {
+      target: { value: "msft" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Resolve ticker" }));
+
+    expect(await screen.findByText(/MSFT resolved to Microsoft Corp/)).toBeInTheDocument();
+    expect(await screen.findByText(`Canonical ID: ${msftId}`)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Quantity"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("Execution price"), {
+      target: { value: "100" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Record transaction" }));
+
+    await waitFor(() => {
+      expect(submittedBody).toEqual(
+        expect.objectContaining({
+          transaction_type: "BUY",
+          asset_id: msftId,
+          quantity: "1",
+          price: "100",
+        }),
+      );
+    });
+  });
+
+  it("offers a ticker-based CSV template so users do not need canonical UUIDs", async () => {
+    baseFetch();
+    renderPage();
+
+    const template = await screen.findByRole("link", {
+      name: "Download ticker CSV template",
+    });
+    expect(template).toHaveAttribute("download", "portfolio-transactions-template.csv");
+    expect(template.getAttribute("href")).toContain("asset_symbol");
   });
 
   it("renders CSV preview rows and blocks atomic confirmation while any row is invalid", async () => {

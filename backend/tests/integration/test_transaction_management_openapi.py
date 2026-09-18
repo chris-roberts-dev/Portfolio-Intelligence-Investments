@@ -32,18 +32,16 @@ def test_openapi_exposes_portfolio_and_transaction_ingestion_contracts() -> None
     assert transaction_collection["get"]["operationId"] == "portfolio_transaction_list"
     assert set(transaction_collection["get"]["responses"]) == {"200", "404"}
     assert transaction_collection["post"]["operationId"] == "portfolio_transaction_create"
-    assert (
-        paths["/api/v1/portfolios/{portfolio_id}/transactions/import/preview/"]["post"][
-            "operationId"
-        ]
-        == "portfolio_transaction_import_preview"
-    )
-    assert (
-        paths["/api/v1/portfolios/{portfolio_id}/transactions/import/confirm/"]["post"][
-            "operationId"
-        ]
-        == "portfolio_transaction_import_confirm"
-    )
+    preview_import = paths["/api/v1/portfolios/{portfolio_id}/transactions/import/preview/"]["post"]
+    confirm_import = paths["/api/v1/portfolios/{portfolio_id}/transactions/import/confirm/"]["post"]
+
+    assert preview_import["operationId"] == "portfolio_transaction_import_preview"
+    assert set(preview_import["responses"]) == {"200", "400", "404", "503"}
+    assert "asset_symbol" in preview_import["description"]
+
+    assert confirm_import["operationId"] == "portfolio_transaction_import_confirm"
+    assert set(confirm_import["responses"]) == {"201", "400", "404", "503"}
+    assert "Re-resolve ticker symbols" in confirm_import["description"]
 
     schemas = schema["components"]["schemas"]
     assert "PortfolioCreateRequest" in schemas

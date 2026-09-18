@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import csv
 import io
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -30,7 +31,7 @@ from apps.portfolios.services.ledger import NegativePositionError, replay_portfo
 
 MAX_TRANSACTION_IMPORT_BYTES = 256 * 1024
 MAX_TRANSACTION_IMPORT_ROWS = 500
-TRANSACTION_IMPORT_COLUMNS = (
+TRANSACTION_IMPORT_ID_COLUMNS = (
     "transaction_type",
     "occurred_at",
     "asset_id",
@@ -38,6 +39,21 @@ TRANSACTION_IMPORT_COLUMNS = (
     "price",
     "fees",
     "cash_amount",
+)
+TRANSACTION_IMPORT_SYMBOL_COLUMNS = (
+    "transaction_type",
+    "occurred_at",
+    "asset_symbol",
+    "quantity",
+    "price",
+    "fees",
+    "cash_amount",
+)
+# Backward-compatible public constant for the original canonical-ID format.
+TRANSACTION_IMPORT_COLUMNS = TRANSACTION_IMPORT_ID_COLUMNS
+TRANSACTION_IMPORT_ACCEPTED_COLUMNS = (
+    TRANSACTION_IMPORT_SYMBOL_COLUMNS,
+    TRANSACTION_IMPORT_ID_COLUMNS,
 )
 ZERO = Decimal("0")
 
@@ -216,9 +232,14 @@ def create_portfolio_transaction(
 def preview_transaction_csv(
     portfolio: Portfolio,
     csv_text: str,
+    *,
+    asset_ids_by_symbol: Mapping[str, UUID] | None = None,
 ) -> TransactionImportPreview:
     """Parse and validate CSV without persisting any transaction rows."""
-    parsed_rows = _parse_csv(csv_text)
+    parsed_rows = _parse_csv(
+        csv_text,
+        asset_ids_by_symbol=asset_ids_by_symbol,
+    )
 
     with db_transaction.atomic():
         locked_portfolio = Portfolio.objects.select_for_update().get(id=portfolio.id)
@@ -233,9 +254,14 @@ def preview_transaction_csv(
 def import_transaction_csv(
     portfolio: Portfolio,
     csv_text: str,
+    *,
+    asset_ids_by_symbol: Mapping[str, UUID] | None = None,
 ) -> TransactionImportResult:
     """Revalidate and atomically commit a complete valid CSV import."""
-    parsed_rows = _parse_csv(csv_text)
+    parsed_rows = _parse_csv(
+        csv_text,
+        asset_ids_by_symbol=asset_ids_by_symbol,
+    )
 
     with db_transaction.atomic():
         locked_portfolio = Portfolio.objects.select_for_update().get(id=portfolio.id)
@@ -432,7 +458,57 @@ def _next_source_sequence(
     return 0 if maximum is None else int(maximum) + 1
 
 
-def _parse_csv(csv_text: str) -> tuple[_ParsedCsvRow, ...]:
+def transaction_import_symbols(csv_text: str) -> tuple[str, ...]:
+    """Return ordered unique ticker symbols from the user-friendly CSV format.
+
+    The canonical-ID CSV remains supported for compatibility and returns no
+    symbols. Structural validation is shared with preview/confirm so a malformed
+    file fails before any provider-backed symbol discovery is attempted.
+    """
+    fieldnames, raw_rows = _read_csv_rows(csv_text)
+    if fieldnames != TRANSACTION_IMPORT_SYMBOL_COLUMNS:
+        return ()
+
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for _row_number, raw_row in raw_rows:
+        raw_symbol = _trimmed(raw_row.get("asset_symbol"))
+        if raw_symbol is None:
+            continue
+        symbol = raw_symbol.upper()
+        if symbol not in seen:
+            seen.add(symbol)
+            ordered.append(symbol)
+
+    return tuple(ordered)
+
+
+def _parse_csv(
+    csv_text: str,
+    *,
+    asset_ids_by_symbol: Mapping[str, UUID] | None = None,
+) -> tuple[_ParsedCsvRow, ...]:
+    fieldnames, raw_rows = _read_csv_rows(csv_text)
+    uses_symbols = fieldnames == TRANSACTION_IMPORT_SYMBOL_COLUMNS
+    resolved_symbols = asset_ids_by_symbol or {}
+
+    return tuple(
+        _parse_csv_row(
+            row_number,
+            raw_row,
+            uses_symbols=uses_symbols,
+            asset_ids_by_symbol=resolved_symbols,
+        )
+        for row_number, raw_row in raw_rows
+    )
+
+
+def _read_csv_rows(
+    csv_text: str,
+) -> tuple[
+    tuple[str, ...],
+    tuple[tuple[int, dict[str | None, str | None]], ...],
+]:
     if not isinstance(csv_text, str):
         raise TypeError("csv_text must be a string")
 
@@ -446,7 +522,7 @@ def _parse_csv(csv_text: str) -> tuple[_ParsedCsvRow, ...]:
     if byte_count > MAX_TRANSACTION_IMPORT_BYTES:
         raise TransactionImportFileError(
             TransactionImportFileErrorCode.CSV_TOO_LARGE,
-            (f"CSV content exceeds the configured {MAX_TRANSACTION_IMPORT_BYTES}-byte limit."),
+            f"CSV content exceeds the configured {MAX_TRANSACTION_IMPORT_BYTES}-byte limit.",
         )
 
     normalized_text = csv_text.lstrip("\ufeff")
@@ -460,14 +536,18 @@ def _parse_csv(csv_text: str) -> tuple[_ParsedCsvRow, ...]:
         ) from exc
 
     fieldnames = tuple(reader.fieldnames or ())
-    if fieldnames != TRANSACTION_IMPORT_COLUMNS:
+    if fieldnames not in TRANSACTION_IMPORT_ACCEPTED_COLUMNS:
         raise TransactionImportFileError(
             TransactionImportFileErrorCode.CSV_HEADER_INVALID,
-            "CSV header must exactly match: " + ",".join(TRANSACTION_IMPORT_COLUMNS),
+            (
+                "CSV header must exactly match either the ticker format: "
+                + ",".join(TRANSACTION_IMPORT_SYMBOL_COLUMNS)
+                + " or the canonical-ID format: "
+                + ",".join(TRANSACTION_IMPORT_ID_COLUMNS)
+            ),
         )
 
-    parsed_rows: list[_ParsedCsvRow] = []
-
+    raw_rows: list[tuple[int, dict[str | None, str | None]]] = []
     try:
         for row_number, raw_row in enumerate(reader, start=2):
             if (
@@ -480,9 +560,8 @@ def _parse_csv(csv_text: str) -> tuple[_ParsedCsvRow, ...]:
             ):
                 continue
 
-            parsed_rows.append(_parse_csv_row(row_number, raw_row))
-
-            if len(parsed_rows) > MAX_TRANSACTION_IMPORT_ROWS:
+            raw_rows.append((row_number, raw_row))
+            if len(raw_rows) > MAX_TRANSACTION_IMPORT_ROWS:
                 raise TransactionImportFileError(
                     TransactionImportFileErrorCode.CSV_TOO_MANY_ROWS,
                     (
@@ -496,20 +575,32 @@ def _parse_csv(csv_text: str) -> tuple[_ParsedCsvRow, ...]:
             "CSV content could not be parsed.",
         ) from exc
 
-    if not parsed_rows:
+    if not raw_rows:
         raise TransactionImportFileError(
             TransactionImportFileErrorCode.CSV_EMPTY,
             "CSV must contain at least one nonblank transaction row.",
         )
 
-    return tuple(parsed_rows)
+    return fieldnames, tuple(raw_rows)
 
 
 def _parse_csv_row(
     row_number: int,
     raw_row: dict[str | None, str | None],
+    *,
+    uses_symbols: bool,
+    asset_ids_by_symbol: Mapping[str, UUID],
 ) -> _ParsedCsvRow:
-    normalized = {column: _trimmed(raw_row.get(column)) for column in TRANSACTION_IMPORT_COLUMNS}
+    normalized: dict[str, str | None] = {
+        "transaction_type": _trimmed(raw_row.get("transaction_type")),
+        "occurred_at": _trimmed(raw_row.get("occurred_at")),
+        "asset_id": _trimmed(raw_row.get("asset_id")),
+        "asset_symbol": _trimmed(raw_row.get("asset_symbol")),
+        "quantity": _trimmed(raw_row.get("quantity")),
+        "price": _trimmed(raw_row.get("price")),
+        "fees": _trimmed(raw_row.get("fees")),
+        "cash_amount": _trimmed(raw_row.get("cash_amount")),
+    }
     issues: list[TransactionImportIssue] = []
 
     if None in raw_row:
@@ -566,11 +657,41 @@ def _parse_csv_row(
             else:
                 normalized["occurred_at"] = occurred_at.isoformat()
 
-    asset_id = _parse_uuid_field(
-        normalized,
-        field="asset_id",
-        issues=issues,
-    )
+    asset_id: UUID | None
+    if uses_symbols:
+        raw_symbol = normalized["asset_symbol"]
+        if raw_symbol is None:
+            asset_id = None
+            if transaction_type in (
+                TransactionType.BUY,
+                TransactionType.SELL,
+                TransactionType.DIVIDEND,
+            ):
+                issues.append(_required_issue("asset_symbol"))
+        else:
+            symbol = raw_symbol.upper()
+            normalized["asset_symbol"] = symbol
+            asset_id = asset_ids_by_symbol.get(symbol)
+            if asset_id is None:
+                issues.append(
+                    TransactionImportIssue(
+                        code=TransactionImportIssueCode.ASSET_NOT_FOUND,
+                        field="asset_symbol",
+                        message=(
+                            f"Ticker {symbol} could not be resolved to a supported "
+                            "canonical USD stock or ETF."
+                        ),
+                    )
+                )
+            else:
+                normalized["asset_id"] = str(asset_id)
+    else:
+        asset_id = _parse_uuid_field(
+            normalized,
+            field="asset_id",
+            issues=issues,
+        )
+
     quantity = _parse_decimal_field(
         normalized,
         field="quantity",
@@ -689,7 +810,7 @@ def _preview_from_parsed(
         transaction_type=parsed.normalized["transaction_type"],
         occurred_at=parsed.normalized["occurred_at"],
         asset_id=parsed.normalized["asset_id"],
-        asset_symbol=asset_symbol,
+        asset_symbol=asset_symbol or parsed.normalized["asset_symbol"],
         quantity=parsed.normalized["quantity"],
         price=parsed.normalized["price"],
         fees=parsed.normalized["fees"],
@@ -737,7 +858,7 @@ def _preview_with_issues(
         transaction_type=parsed.normalized["transaction_type"],
         occurred_at=parsed.normalized["occurred_at"],
         asset_id=parsed.normalized["asset_id"],
-        asset_symbol=None,
+        asset_symbol=parsed.normalized["asset_symbol"],
         quantity=parsed.normalized["quantity"],
         price=parsed.normalized["price"],
         fees=parsed.normalized["fees"],

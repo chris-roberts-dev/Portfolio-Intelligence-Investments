@@ -45,16 +45,16 @@ export function isOverviewRange(value: string | null): value is OverviewRange {
 
 export function resolveOverviewDateRange(
   range: OverviewRange,
-  portfolioCreatedAt: string,
+  portfolioInceptionAt: string,
   now: Date = new Date(),
 ): { start: string; end: string } {
   const today = startOfLocalDay(now);
   const end = formatLocalIsoDate(addDays(today, 1));
 
   if (range === "MAX") {
-    const [createdDate] = portfolioCreatedAt.split("T");
+    const [inceptionDate] = portfolioInceptionAt.split("T");
     return {
-      start: createdDate || formatLocalIsoDate(addYears(today, -1)),
+      start: inceptionDate || formatLocalIsoDate(addYears(today, -1)),
       end,
     };
   }

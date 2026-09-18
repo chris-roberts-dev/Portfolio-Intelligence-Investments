@@ -174,6 +174,9 @@ async function invalidatePortfolioLedgerQueries(
 ): Promise<void> {
   await Promise.all([
     queryClient.invalidateQueries({
+      queryKey: PORTFOLIOS_QUERY_KEY,
+    }),
+    queryClient.invalidateQueries({
       queryKey: portfolioTransactionsQueryKey(portfolioId),
     }),
     invalidatePortfolioDerivedQueries(queryClient, portfolioId),

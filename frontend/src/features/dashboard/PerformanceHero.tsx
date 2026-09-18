@@ -46,12 +46,12 @@ export function PerformanceHero({
   currency,
   moduleError,
 }: PerformanceHeroProps) {
-  const [mode, setMode] = useState<PerformanceChartMode>("VALUE");
+  const [mode, setMode] = useState<PerformanceChartMode>("RETURN");
 
   return (
     <DashboardCard
-      title="Portfolio performance"
-      eyebrow="Overview"
+      title="Cumulative performance vs benchmark"
+      eyebrow="Performance"
       className="min-h-136"
       actions={
         performance ? (

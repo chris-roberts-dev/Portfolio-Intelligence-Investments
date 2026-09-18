@@ -1,12 +1,27 @@
-export type DashboardRange = "1W" | "1M" | "3M" | "6M" | "YTD" | "1Y" | "ALL";
+export type DashboardRange =
+  | "1W"
+  | "1M"
+  | "3M"
+  | "6M"
+  | "MTD"
+  | "QTD"
+  | "YTD"
+  | "1Y"
+  | "3Y"
+  | "5Y"
+  | "ALL";
 
 export const DASHBOARD_RANGES: readonly DashboardRange[] = [
   "1W",
   "1M",
   "3M",
   "6M",
+  "MTD",
+  "QTD",
   "YTD",
   "1Y",
+  "3Y",
+  "5Y",
   "ALL",
 ];
 
@@ -42,6 +57,7 @@ export function formatLocalIsoDate(value: Date): string {
 export function resolveDashboardDateRange(
   range: DashboardRange,
   portfolioCreatedAt: string,
+  ledgerInceptionAt: string | null = null,
   now: Date = new Date(),
 ): { start: string; end: string } {
   const today = startOfLocalDay(now);
@@ -61,16 +77,31 @@ export function resolveDashboardDateRange(
     case "6M":
       start = addMonths(today, -6);
       break;
+    case "MTD":
+      start = new Date(today.getFullYear(), today.getMonth(), 1);
+      break;
+    case "QTD": {
+      const quarterStartMonth = Math.floor(today.getMonth() / 3) * 3;
+      start = new Date(today.getFullYear(), quarterStartMonth, 1);
+      break;
+    }
     case "YTD":
       start = new Date(today.getFullYear(), 0, 1);
       break;
     case "1Y":
       start = addYears(today, -1);
       break;
+    case "3Y":
+      start = addYears(today, -3);
+      break;
+    case "5Y":
+      start = addYears(today, -5);
+      break;
     case "ALL": {
-      const [createdDate] = portfolioCreatedAt.split("T");
+      const effectiveInception = ledgerInceptionAt ?? portfolioCreatedAt;
+      const [inceptionDate] = effectiveInception.split("T");
       return {
-        start: createdDate || formatLocalIsoDate(addYears(today, -1)),
+        start: inceptionDate || formatLocalIsoDate(addYears(today, -1)),
         end: formatLocalIsoDate(endExclusive),
       };
     }

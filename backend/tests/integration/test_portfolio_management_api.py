@@ -50,6 +50,60 @@ def test_authenticated_user_creates_server_owned_usd_portfolio() -> None:
     assert created.name == "Retirement Portfolio"
     assert created.base_currency == "USD"
     assert response.data["base_currency"] == "USD"
+    assert response.data["ledger_inception_at"] is None
+
+
+@pytest.mark.django_db
+def test_portfolio_list_and_detail_expose_earliest_ledger_inception() -> None:
+    owner = User.objects.create_user(
+        email="portfolio-inception-owner@example.com",
+        password="test-password-123",
+    )
+    portfolio = Portfolio.objects.create(
+        user=owner,
+        name="Historical portfolio",
+    )
+    later = datetime(2021, 5, 3, 14, 0, tzinfo=UTC)
+    earliest = datetime(2020, 1, 2, 14, 0, tzinfo=UTC)
+    Transaction.objects.create(
+        portfolio=portfolio,
+        transaction_type=TransactionType.DEPOSIT,
+        occurred_at=later,
+        source_sequence=2,
+        cash_amount=Decimal("500.00"),
+    )
+    Transaction.objects.create(
+        portfolio=portfolio,
+        transaction_type=TransactionType.DEPOSIT,
+        occurred_at=earliest,
+        source_sequence=1,
+        cash_amount=Decimal("1000.00"),
+    )
+    client = authenticated_client(owner)
+
+    list_response = client.get(reverse("api-v1-portfolio-list"))
+    detail_response = client.get(
+        reverse(
+            "api-v1-portfolio-detail",
+            kwargs={"portfolio_id": portfolio.id},
+        )
+    )
+
+    assert list_response.status_code == status.HTTP_200_OK
+    assert detail_response.status_code == status.HTTP_200_OK
+
+    list_payload = list_response.json()
+    detail_payload = detail_response.json()
+
+    list_inception = datetime.fromisoformat(
+        list_payload[0]["ledger_inception_at"].replace("Z", "+00:00")
+    )
+    detail_inception = datetime.fromisoformat(
+        detail_payload["ledger_inception_at"].replace("Z", "+00:00")
+    )
+
+    assert list_inception == earliest
+    assert detail_inception == earliest
 
 
 @pytest.mark.django_db

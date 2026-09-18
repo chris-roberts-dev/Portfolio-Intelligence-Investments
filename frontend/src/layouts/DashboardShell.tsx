@@ -258,12 +258,12 @@ export function DashboardShell({
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-slate-800 bg-slate-950 lg:flex">
+      <aside className="app-shell-navigation fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-slate-800 bg-slate-950 lg:flex">
         {navigation}
       </aside>
 
       {mobileNavigationOpen ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="app-shell-navigation fixed inset-0 z-50 lg:hidden">
           <button
             type="button"
             className="absolute inset-0 bg-slate-950/50"
@@ -284,9 +284,9 @@ export function DashboardShell({
         </div>
       ) : null}
 
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-          <div className="border-b border-slate-200">
+      <div className="app-shell-content lg:pl-64">
+        <header className="app-shell-header sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+          <div className="app-shell-topbar border-b border-slate-200">
             <div className="mx-auto flex min-h-14 w-full max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
               <div className="flex min-w-0 items-center gap-3">
                 <button
@@ -349,7 +349,7 @@ export function DashboardShell({
           </div>
         ) : null}
 
-        <main className="mx-auto w-full max-w-[1440px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+        <main className="app-shell-main mx-auto w-full max-w-[1440px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
           {children}
         </main>
       </div>

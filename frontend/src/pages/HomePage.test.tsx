@@ -45,6 +45,7 @@ function portfolio() {
     name: "Primary portfolio",
     base_currency: "USD",
     benchmark_asset_id: "00000000-0000-0000-0000-000000000099",
+    ledger_inception_at: "2025-01-02T15:00:00Z",
     created_at: "2025-01-02T15:00:00Z",
     updated_at: "2026-09-15T22:00:00Z",
   };
@@ -309,6 +310,51 @@ describe("HomePage overview", () => {
     expect(
       screen.getByRole("link", { name: "Manage portfolios" }),
     ).toHaveAttribute("href", "/portfolios");
+  });
+
+  it("uses the earliest ledger transaction for Max and since-inception context", async () => {
+    const dashboardStarts: Array<string | null> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+
+        if (url.endsWith("/api/v1/portfolios/")) {
+          return new Response(
+            JSON.stringify([
+              {
+                ...portfolio(),
+                created_at: "2026-09-18T13:00:00Z",
+                ledger_inception_at: "2020-01-02T14:00:00Z",
+              },
+            ]),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        }
+
+        if (url.includes(`/api/v1/portfolios/${PORTFOLIO_ID}/dashboard/`)) {
+          const parsed = new URL(url, "http://localhost");
+          dashboardStarts.push(parsed.searchParams.get("start"));
+          return new Response(JSON.stringify(dashboardSnapshot()), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    renderHome(`/?portfolio=${PORTFOLIO_ID}&range=MAX`);
+
+    expect(
+      await screen.findByRole("heading", { name: "Your Portfolio" }),
+    ).toBeInTheDocument();
+    expect(dashboardStarts).toContain("2020-01-02");
+    expect(screen.getByText(/Since .*2020/)).toBeInTheDocument();
   });
 
   it("exposes All Portfolios honestly without calculating consolidated analytics in React", async () => {

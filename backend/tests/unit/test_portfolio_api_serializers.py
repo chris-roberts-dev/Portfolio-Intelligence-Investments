@@ -67,6 +67,7 @@ def test_portfolio_summary_serializer_uses_explicit_public_fields() -> None:
         name="Long-Term Portfolio",
         base_currency="USD",
         benchmark_asset_id=BENCHMARK_ID,
+        ledger_inception_at=None,
         created_at=created_at,
         updated_at=updated_at,
     )
@@ -78,6 +79,7 @@ def test_portfolio_summary_serializer_uses_explicit_public_fields() -> None:
         "name": "Long-Term Portfolio",
         "base_currency": "USD",
         "benchmark_asset_id": str(BENCHMARK_ID),
+        "ledger_inception_at": None,
         "created_at": created_at.isoformat().replace("+00:00", "Z"),
         "updated_at": updated_at.isoformat().replace("+00:00", "Z"),
     }

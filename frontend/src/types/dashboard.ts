@@ -22,6 +22,7 @@ export interface PortfolioListItem {
   name: string;
   base_currency: string;
   benchmark_asset_id: string | null;
+  ledger_inception_at: string | null;
   created_at: string;
   updated_at: string;
 }

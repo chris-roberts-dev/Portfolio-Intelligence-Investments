@@ -8,6 +8,7 @@ from typing import Any, cast
 from uuid import UUID
 
 from django.core.exceptions import ValidationError
+from django.db.models import Min
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.decorators import (
@@ -141,7 +142,11 @@ def portfolio_list_view(request: Request) -> Response:
             status=status.HTTP_201_CREATED,
         )
 
-    portfolios = Portfolio.objects.owned_by(user).select_related("benchmark_asset")
+    portfolios = (
+        Portfolio.objects.owned_by(user)
+        .select_related("benchmark_asset")
+        .annotate(ledger_inception_at=Min("transactions__occurred_at"))
+    )
     return Response(
         PortfolioSummarySerializer(
             cast(Any, portfolios),
@@ -559,6 +564,7 @@ def _owned_portfolio(
     return (
         Portfolio.objects.owned_by(user)
         .select_related("benchmark_asset")
+        .annotate(ledger_inception_at=Min("transactions__occurred_at"))
         .filter(id=portfolio_id)
         .first()
     )

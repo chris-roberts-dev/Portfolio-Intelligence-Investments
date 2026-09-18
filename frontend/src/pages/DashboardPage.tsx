@@ -4,48 +4,56 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { StatePanel } from "../components/ui/StatePanel";
 import { DashboardOverview } from "../features/dashboard/DashboardOverview";
 import {
-  DASHBOARD_RANGES,
   resolveDashboardDateRange,
   type DashboardRange,
 } from "../features/dashboard/dateRange";
-import { formatDateTime } from "../features/dashboard/formatting";
+import {
+  formatDate,
+  formatDateTime,
+} from "../features/dashboard/formatting";
 import { useDashboardSnapshot, usePortfolios } from "../hooks/usePortfolioData";
 import { DashboardShell } from "../layouts/DashboardShell";
-import type { PerformanceDataQuality } from "../types/dashboard";
+
+const REPORT_RANGES: readonly DashboardRange[] = [
+  "MTD",
+  "QTD",
+  "YTD",
+  "1Y",
+  "3Y",
+  "5Y",
+  "ALL",
+];
+const ALL_DASHBOARD_RANGES: readonly DashboardRange[] = [
+  "1W",
+  "1M",
+  "3M",
+  "6M",
+  "MTD",
+  "QTD",
+  "YTD",
+  "1Y",
+  "3Y",
+  "5Y",
+  "ALL",
+];
 
 function isDashboardRange(value: string | null): value is DashboardRange {
-  return value !== null && DASHBOARD_RANGES.includes(value as DashboardRange);
+  return value !== null && ALL_DASHBOARD_RANGES.includes(value as DashboardRange);
 }
 
-function snapshotQuality(
-  quality: PerformanceDataQuality | undefined,
-  isComplete: boolean | undefined,
-): { label: string; className: string } {
-  if (quality === "STALE") {
-    return {
-      label: "Stale data",
-      className: "border-amber-200 bg-amber-50 text-amber-900",
-    };
+function inclusiveEndDate(endExclusive: string): string {
+  const [year, month, day] = endExclusive.split("-").map(Number);
+  if (!year || !month || !day) {
+    return endExclusive;
   }
 
-  if (quality === "PARTIAL" || isComplete === false) {
-    return {
-      label: "Partial data",
-      className: "border-orange-200 bg-orange-50 text-orange-900",
-    };
-  }
-
-  if (quality === "UNAVAILABLE") {
-    return {
-      label: "Unavailable",
-      className: "border-rose-200 bg-rose-50 text-rose-900",
-    };
-  }
-
-  return {
-    label: "Current",
-    className: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  };
+  const date = new Date(Date.UTC(year, month - 1, day, 12));
+  date.setUTCDate(date.getUTCDate() - 1);
+  return [
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, "0"),
+    String(date.getUTCDate()).padStart(2, "0"),
+  ].join("-");
 }
 
 export function DashboardPage() {
@@ -57,199 +65,243 @@ export function DashboardPage() {
     (portfolio) => portfolio.id === portfolioId,
   );
   const rangeParam = searchParams.get("range");
-  const range: DashboardRange = isDashboardRange(rangeParam) ? rangeParam : "1M";
+  const range: DashboardRange = isDashboardRange(rangeParam) ? rangeParam : "YTD";
+
   const request = useMemo(() => {
     if (!portfolioId || !selectedPortfolio) {
       return null;
     }
 
-    const dates = resolveDashboardDateRange(range, selectedPortfolio.created_at);
+    const dates = resolveDashboardDateRange(
+      range,
+      selectedPortfolio.created_at,
+      selectedPortfolio.ledger_inception_at,
+    );
     return {
       portfolioId,
       start: dates.start,
       end: dates.end,
     };
   }, [portfolioId, range, selectedPortfolio]);
+
   const snapshotQuery = useDashboardSnapshot(request);
   const snapshot = snapshotQuery.data;
-  const freshness = snapshotQuality(
-    snapshot?.performance?.portfolio_data_quality,
-    snapshot?.is_complete,
-  );
+  const inceptionAt =
+    selectedPortfolio?.ledger_inception_at ?? selectedPortfolio?.created_at ?? null;
+  const inceptionDate = inceptionAt?.split("T")[0] ?? null;
+  const benchmarkLabel =
+    snapshot?.performance?.provenance.benchmark_symbol ??
+    (selectedPortfolio?.benchmark_asset_id ? "Configured benchmark" : "Not configured");
+  const reportStart = snapshot?.snapshot.effective_start ?? request?.start ?? null;
+  const reportEndExclusive =
+    snapshot?.snapshot.effective_end_exclusive ?? request?.end ?? null;
+  const reportEnd = reportEndExclusive ? inclusiveEndDate(reportEndExclusive) : null;
 
   const header = (
-    <div className="mx-auto flex min-h-20 w-full max-w-[1600px] flex-wrap items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
-          <Link to="/" className="hover:text-slate-900">
-            Overview
-          </Link>
-          <span aria-hidden="true">/</span>
-          <span>Portfolio dashboard</span>
-        </div>
-        <div className="mt-1 flex flex-wrap items-center gap-3">
-          <h1 className="truncate text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">
-            {selectedPortfolio?.name ?? "Portfolio dashboard"}
+    <div className="portfolio-report-header mx-auto w-full max-w-[1440px] px-4 py-4 sm:px-6 lg:px-8">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="portfolio-report-screen-only flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
+            <Link to="/portfolios" className="outline-none hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-blue-500">
+              Portfolios
+            </Link>
+            <span aria-hidden="true">/</span>
+            <span>Portfolio report</span>
+          </div>
+
+          {portfoliosQuery.data && portfoliosQuery.data.length > 0 ? (
+            <label className="portfolio-report-screen-only mt-2 block max-w-xl">
+              <span className="sr-only">Portfolio</span>
+              <select
+                value={portfolioId ?? ""}
+                onChange={(event: ChangeEvent<HTMLSelectElement>) => {
+                  if (event.target.value) {
+                    navigate(
+                      `/portfolios/${event.target.value}/dashboard?range=${range}`,
+                    );
+                  }
+                }}
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-lg font-semibold text-slate-950 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              >
+                {portfoliosQuery.data.map((portfolio) => (
+                  <option key={portfolio.id} value={portfolio.id}>
+                    {portfolio.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
+          <h1 className="portfolio-report-print-title mt-2 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+            {selectedPortfolio?.name ?? "Portfolio report"}
           </h1>
-          {snapshot ? (
-            <span
-              className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${freshness.className}`}
-            >
-              {freshness.label}
+          <p className="mt-1 text-sm text-slate-600">
+            Portfolio report
+            {reportStart && reportEnd
+              ? ` · ${formatDate(reportStart)} – ${formatDate(reportEnd)}`
+              : ""}
+          </p>
+          <p className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-slate-500">
+            <span>Benchmark: {benchmarkLabel}</span>
+            <span aria-hidden="true">·</span>
+            <span>Currency: {selectedPortfolio?.base_currency ?? "USD"}</span>
+            <span aria-hidden="true">·</span>
+            <span>
+              Inception: {inceptionDate ? formatDate(inceptionDate) : "Not available"}
             </span>
+            {snapshot ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>Provider: {snapshot.snapshot.provider}</span>
+              </>
+            ) : null}
+          </p>
+        </div>
+
+        <div className="portfolio-report-screen-only flex w-full flex-wrap items-center justify-end gap-3 xl:w-auto">
+          <div
+            role="group"
+            className="flex flex-wrap rounded-xl border border-slate-200 bg-white p-1"
+            aria-label="Portfolio report date range"
+          >
+            {REPORT_RANGES.map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={range === option}
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams);
+                  next.set("range", option);
+                  setSearchParams(next, { replace: true });
+                }}
+                className={`min-h-9 rounded-lg px-3 text-xs font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                  range === option
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                }`}
+              >
+                {option === "ALL" ? "Since Inception" : option}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500"
+          >
+            Print / Export PDF
+          </button>
+
+          {portfolioId ? (
+            <Link
+              to={`/activity?portfolio=${encodeURIComponent(portfolioId)}`}
+              className="inline-flex min-h-10 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm outline-none hover:bg-blue-700 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+            >
+              Add transaction
+            </Link>
+          ) : null}
+
+          {portfolioId ? (
+            <Link
+              to={`/portfolios/${encodeURIComponent(portfolioId)}/manage?range=${encodeURIComponent(range)}`}
+              className="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              Manage
+            </Link>
           ) : null}
         </div>
       </div>
 
-      <div className="flex w-full flex-wrap items-center justify-end gap-3 sm:w-auto">
-        {portfoliosQuery.data && portfoliosQuery.data.length > 0 ? (
-          <label className="flex items-center gap-2 text-sm text-slate-600">
-            <span className="sr-only">Portfolio</span>
-            <select
-              value={portfolioId ?? ""}
-              onChange={(event: ChangeEvent<HTMLSelectElement>) => {
-                if (event.target.value) {
-                  navigate(`/portfolios/${event.target.value}/dashboard?range=${range}`);
-                }
-              }}
-              className="max-w-52 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-            >
-              {portfoliosQuery.data.map((portfolio) => (
-                <option key={portfolio.id} value={portfolio.id}>
-                  {portfolio.name}
-                </option>
-              ))}
-            </select>
-          </label>
+      <nav
+        className="portfolio-report-screen-only mt-4 flex gap-1 overflow-x-auto border-b border-slate-200"
+        aria-label="Portfolio report sections"
+      >
+        {[
+          ["#report-summary", "Report"],
+          ["#holdings", "Holdings"],
+          ["#allocation", "Allocation"],
+          ["#performance", "Performance"],
+          ["#risk", "Risk"],
+        ].map(([href, label]) => (
+          <a
+            key={href}
+            href={href}
+            className="whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 outline-none hover:border-blue-300 hover:text-blue-800 focus-visible:ring-2 focus-visible:ring-blue-500"
+          >
+            {label}
+          </a>
+        ))}
+        {portfolioId ? (
+          <Link
+            to={`/activity?portfolio=${encodeURIComponent(portfolioId)}`}
+            className="whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-600 outline-none hover:border-blue-300 hover:text-blue-800 focus-visible:ring-2 focus-visible:ring-blue-500"
+          >
+            Transactions
+          </Link>
         ) : null}
-
-        {snapshot ? (
-          <div className="text-right text-xs leading-5 text-slate-500">
-            <p>{snapshot.snapshot.base_currency} · {snapshot.snapshot.provider}</p>
-            <p>As of {formatDateTime(snapshot.snapshot.current_data_as_of)}</p>
-          </div>
-        ) : null}
-      </div>
+      </nav>
     </div>
   );
 
   return (
     <DashboardShell header={header}>
-      <section
-        className="mb-5 flex flex-wrap items-center justify-between gap-4"
-        aria-label="Dashboard period controls"
-      >
-        <div>
-          <p className="text-sm font-medium text-slate-500">Selected period</p>
-          <p className="mt-0.5 text-sm text-slate-700">
-            {snapshot
-              ? `${snapshot.snapshot.effective_start} to ${snapshot.snapshot.effective_end_exclusive}`
-              : "Waiting for portfolio snapshot"}
-          </p>
+      <div className="portfolio-report-page">
+        {snapshot ? (
+          <div className="portfolio-report-print-context mb-4 hidden text-xs text-slate-600">
+            <p>
+              Data as of {formatDateTime(snapshot.snapshot.current_data_as_of)} · Snapshot {snapshot.snapshot.snapshot_id}
+            </p>
+          </div>
+        ) : null}
 
-          {portfolioId && selectedPortfolio ? (
-            <div className="mt-2 flex flex-wrap gap-4 text-sm font-semibold">
+        {!portfoliosQuery.isPending && portfoliosQuery.data && !selectedPortfolio ? (
+          <StatePanel
+            title="Portfolio not found"
+            message="This portfolio is not available in the authenticated account scope."
+            tone="error"
+            action={
               <Link
-                to={`/portfolios/${encodeURIComponent(
-                  portfolioId,
-                )}/analysis?range=${encodeURIComponent(range)}`}
-                className="text-blue-700 outline-none underline decoration-blue-200 underline-offset-4 hover:text-blue-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                to="/portfolios"
+                className="inline-flex rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white"
               >
-                View portfolio analysis →
+                Choose a portfolio
               </Link>
+            }
+          />
+        ) : (
+          <DashboardOverview
+            snapshot={snapshot}
+            isLoading={snapshotQuery.isPending || portfoliosQuery.isPending}
+            isFetching={snapshotQuery.isFetching && snapshot !== undefined}
+            error={
+              snapshotQuery.error instanceof Error
+                ? snapshotQuery.error
+                : portfoliosQuery.error instanceof Error
+                  ? portfoliosQuery.error
+                  : null
+            }
+            onRetry={() => {
+              void portfoliosQuery.refetch();
+              void snapshotQuery.refetch();
+            }}
+          />
+        )}
 
-              <Link
-                to={`/allocation-lab?portfolio=${encodeURIComponent(
-                  portfolioId,
-                )}&range=${encodeURIComponent(range)}`}
-                className="text-violet-700 outline-none underline decoration-violet-200 underline-offset-4 hover:text-violet-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-              >
-                Open Allocation Lab →
-              </Link>
-
-              <Link
-                to={`/activity?portfolio=${encodeURIComponent(portfolioId)}`}
-                className="text-blue-700 outline-none underline decoration-blue-200 underline-offset-4 hover:text-blue-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-              >
-                Activity & Transactions
-              </Link>
-
-              <Link
-                to={`/portfolios/${encodeURIComponent(
-                  portfolioId,
-                )}/manage?range=${encodeURIComponent(range)}`}
-                className="text-slate-700 outline-none underline decoration-slate-200 underline-offset-4 hover:text-slate-950 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-              >
-                Manage portfolio
-              </Link>
+        {snapshot ? (
+          <footer className="portfolio-report-footer mt-5 border-t border-slate-200 pt-4 text-xs leading-5 text-slate-500">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p>
+                Snapshot {snapshot.snapshot.snapshot_id} · Engine {snapshot.snapshot.engine_version}
+              </p>
+              <p>Calculated {formatDateTime(snapshot.snapshot.calculated_at)}</p>
             </div>
-          ) : null}
-        </div>
-
-        <div className="flex flex-wrap gap-1 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
-          {DASHBOARD_RANGES.map((option) => (
-            <button
-              key={option}
-              type="button"
-              aria-pressed={range === option}
-              onClick={() => {
-                const next = new URLSearchParams(searchParams);
-                next.set("range", option);
-                setSearchParams(next);
-              }}
-              className={`rounded-xl px-3 py-2 text-xs font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                range === option
-                  ? "bg-slate-950 text-white"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-              }`}
-            >
-              {option === "ALL" ? "All" : option}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {!portfoliosQuery.isPending && portfoliosQuery.data && !selectedPortfolio ? (
-        <StatePanel
-          title="Portfolio not found"
-          message="This portfolio is not available in the authenticated account scope."
-          tone="error"
-          action={
-            <Link
-              to="/"
-              className="inline-flex rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white"
-            >
-              Choose a portfolio
-            </Link>
-          }
-        />
-      ) : (
-        <DashboardOverview
-          snapshot={snapshot}
-          isLoading={snapshotQuery.isPending || portfoliosQuery.isPending}
-          isFetching={snapshotQuery.isFetching && snapshot !== undefined}
-          error={
-            snapshotQuery.error instanceof Error
-              ? snapshotQuery.error
-              : portfoliosQuery.error instanceof Error
-                ? portfoliosQuery.error
-                : null
-          }
-          onRetry={() => {
-            void portfoliosQuery.refetch();
-            void snapshotQuery.refetch();
-          }}
-        />
-      )}
-
-      {snapshot ? (
-        <footer className="mt-5 flex flex-wrap items-center justify-between gap-3 px-1 text-xs text-slate-500">
-          <p>
-            Snapshot {snapshot.snapshot.snapshot_id} · Engine {snapshot.snapshot.engine_version}
-          </p>
-          <p>Calculated {formatDateTime(snapshot.snapshot.calculated_at)}</p>
-        </footer>
-      ) : null}
+            <p className="mt-2">
+              Returns are time-weighted where performance is available. Contributions and withdrawals are external cash flows and are not presented as investment gains or losses. Report currency {snapshot.snapshot.base_currency}.
+            </p>
+          </footer>
+        ) : null}
+      </div>
     </DashboardShell>
   );
 }

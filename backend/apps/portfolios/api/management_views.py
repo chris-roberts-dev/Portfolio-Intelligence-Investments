@@ -48,6 +48,7 @@ from apps.portfolios.services.transaction_ingestion import (
     create_portfolio_transaction,
     import_transaction_csv,
     preview_transaction_csv,
+    transaction_import_symbols,
 )
 
 
@@ -261,8 +262,10 @@ def portfolio_transaction_create_view(
     operation_id="portfolio_transaction_import_preview",
     description=(
         "Parse and validate the documented CSV transaction format without persisting "
-        "rows. Preview uses the same transaction model validation and ledger replay "
-        "rules as confirmation."
+        "transaction rows. The preferred asset_symbol format resolves ticker symbols "
+        "through the canonical asset-discovery boundary before ledger validation; the "
+        "legacy asset_id format remains accepted. Preview uses the same transaction "
+        "model validation and ledger replay rules as confirmation."
     ),
     request=TransactionImportRequestSerializer,
     responses={
@@ -277,6 +280,10 @@ def portfolio_transaction_create_view(
         status.HTTP_404_NOT_FOUND: OpenApiResponse(
             response=PortfolioApiErrorSerializer,
             description="The portfolio does not exist in the authenticated user's scope.",
+        ),
+        status.HTTP_503_SERVICE_UNAVAILABLE: OpenApiResponse(
+            response=PortfolioApiErrorSerializer,
+            description="Ticker discovery is unavailable for a symbol-format CSV.",
         ),
     },
     tags=["transactions"],
@@ -299,9 +306,16 @@ def portfolio_transaction_import_preview_view(
         return _validation_response(serializer.errors)
 
     try:
+        asset_ids_by_symbol = _transaction_import_asset_ids(
+            serializer.csv_text_value,
+        )
+        if isinstance(asset_ids_by_symbol, Response):
+            return asset_ids_by_symbol
+
         preview = preview_transaction_csv(
             portfolio,
             serializer.csv_text_value,
+            asset_ids_by_symbol=asset_ids_by_symbol,
         )
     except TransactionImportFileError as exc:
         return _import_file_error_response(exc)
@@ -315,8 +329,9 @@ def portfolio_transaction_import_preview_view(
 @extend_schema(
     operation_id="portfolio_transaction_import_confirm",
     description=(
-        "Re-parse, revalidate, replay, and atomically commit the documented CSV "
-        "transaction format. Any invalid row prevents the complete import."
+        "Re-resolve ticker symbols when present, then re-parse, revalidate, replay, "
+        "and atomically commit the documented CSV transaction format. Any invalid row "
+        "prevents the complete transaction import."
     ),
     request=TransactionImportRequestSerializer,
     responses={
@@ -331,6 +346,10 @@ def portfolio_transaction_import_preview_view(
         status.HTTP_404_NOT_FOUND: OpenApiResponse(
             response=PortfolioApiErrorSerializer,
             description="The portfolio does not exist in the authenticated user's scope.",
+        ),
+        status.HTTP_503_SERVICE_UNAVAILABLE: OpenApiResponse(
+            response=PortfolioApiErrorSerializer,
+            description="Ticker discovery is unavailable for a symbol-format CSV.",
         ),
     },
     tags=["transactions"],
@@ -353,9 +372,16 @@ def portfolio_transaction_import_confirm_view(
         return _validation_response(serializer.errors)
 
     try:
+        asset_ids_by_symbol = _transaction_import_asset_ids(
+            serializer.csv_text_value,
+        )
+        if isinstance(asset_ids_by_symbol, Response):
+            return asset_ids_by_symbol
+
         result = import_transaction_csv(
             portfolio,
             serializer.csv_text_value,
+            asset_ids_by_symbol=asset_ids_by_symbol,
         )
     except TransactionImportFileError as exc:
         return _import_file_error_response(exc)
@@ -373,6 +399,54 @@ def portfolio_transaction_import_confirm_view(
         TransactionImportResultSerializer(result).data,
         status=status.HTTP_201_CREATED,
     )
+
+
+def _transaction_import_asset_ids(
+    csv_text: str,
+) -> dict[str, UUID] | Response:
+    """Resolve ticker-format CSV rows to canonical asset identities.
+
+    The legacy asset_id CSV format needs no provider-backed discovery. For the
+    user-friendly asset_symbol format, supported symbols are resolved through
+    the same explicit canonical asset-discovery boundary used by Market Data.
+    """
+    symbols = transaction_import_symbols(csv_text)
+    if not symbols:
+        return {}
+
+    try:
+        configuration = load_market_data_provider_configuration()
+        provider_name = configuration.default_provider
+        batch = resolve_canonical_assets_with_discovery(
+            symbols,
+            provider_name=provider_name,
+            resolver=get_asset_resolver(),
+            discovery_provider=get_asset_discovery_provider(provider_name),
+            catalog_writer=get_asset_catalog_writer(),
+        )
+    except ProviderConfigurationError as exc:
+        return Response(
+            {
+                "code": "PROVIDER_CONFIGURATION_ERROR",
+                "detail": str(exc),
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    except ValueError as exc:
+        return Response(
+            {
+                "code": "VALIDATION_ERROR",
+                "detail": str(exc),
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return {
+        outcome.symbol.upper(): outcome.asset_id
+        for outcome in batch.outcomes
+        if outcome.status is CanonicalAssetResolutionStatus.RESOLVED
+        and outcome.asset_id is not None
+    }
 
 
 def _owned_portfolio(

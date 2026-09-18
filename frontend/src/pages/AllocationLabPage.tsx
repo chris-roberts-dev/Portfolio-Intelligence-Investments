@@ -368,6 +368,7 @@ export function AllocationLabPage() {
     const dates = resolveDashboardDateRange(
       rangeParam,
       selectedPortfolio.created_at,
+      selectedPortfolio.ledger_inception_at,
     );
     setStart(dates.start);
     setEnd(dates.end);

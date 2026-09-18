@@ -19,9 +19,8 @@ export async function loginSampleUser(page: Page): Promise<void> {
 }
 
 export async function openSampleDashboard(page: Page): Promise<void> {
-  const card = page.getByRole("article").filter({
-    has: page.getByRole("heading", { name: SAMPLE_PORTFOLIO_NAME }),
-  });
-  await card.getByRole("link", { name: /Open dashboard/ }).click();
-  await expect(page.getByText("Portfolio performance")).toBeVisible();
+  await page.getByRole("link", { name: "View portfolio" }).click();
+  await expect(
+    page.getByText("Cumulative performance vs benchmark"),
+  ).toBeVisible();
 }

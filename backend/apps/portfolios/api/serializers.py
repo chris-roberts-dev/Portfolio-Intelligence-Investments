@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
+from typing import cast
+
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.portfolios.models import Portfolio
@@ -48,8 +52,26 @@ class PortfolioSummarySerializer(serializers.Serializer[Portfolio]):
         read_only=True,
         allow_null=True,
     )
+    ledger_inception_at = serializers.SerializerMethodField()
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
+
+    @extend_schema_field(serializers.DateTimeField(allow_null=True))
+    def get_ledger_inception_at(self, obj: Portfolio) -> datetime | None:
+        """Return the first authoritative ledger event, if one exists."""
+        if hasattr(obj, "ledger_inception_at"):
+            return cast(datetime | None, obj.ledger_inception_at)
+
+        transactions = getattr(obj, "transactions", None)
+        if transactions is None:
+            return None
+
+        return cast(
+            datetime | None,
+            transactions.order_by("occurred_at", "source_sequence", "id")
+            .values_list("occurred_at", flat=True)
+            .first(),
+        )
 
 
 class CurrentHoldingSerializer(serializers.Serializer[CurrentPositionPrice]):

@@ -9,6 +9,9 @@ import type {
   DashboardSnapshotResult,
 } from "../../types/dashboard";
 import { PerformanceHero } from "./PerformanceHero";
+import { PortfolioReportKpis } from "./PortfolioReportKpis";
+import { PortfolioReportRisk } from "./PortfolioReportRisk";
+import { PortfolioReportTopHoldings } from "./PortfolioReportTopHoldings";
 import { PortfolioSummaryCard } from "./PortfolioSummaryCard";
 
 const AllocationPanel = lazy(async () => {
@@ -272,16 +275,28 @@ export function DashboardOverview({
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:items-start">
-        <div className="lg:col-span-8">
-          <PerformanceHero
-            performance={snapshot.performance}
-            currency={snapshot.snapshot.base_currency}
-            moduleError={performanceError}
-          />
+      <PortfolioReportKpis snapshot={snapshot} />
+
+      <div id="performance" className="mt-4">
+        <PerformanceHero
+          performance={snapshot.performance}
+          currency={snapshot.snapshot.base_currency}
+          moduleError={performanceError}
+        />
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-12 xl:items-start">
+        <div id="allocation" className="xl:col-span-7">
+          <Suspense fallback={<AllocationSkeleton />}>
+            <AllocationPanel
+              allocation={snapshot.allocation}
+              currency={snapshot.snapshot.base_currency}
+              moduleError={allocationError}
+            />
+          </Suspense>
         </div>
 
-        <div className="lg:col-span-4">
+        <div className="xl:col-span-5">
           <PortfolioSummaryCard
             summary={snapshot.summary}
             currency={snapshot.snapshot.base_currency}
@@ -290,17 +305,22 @@ export function DashboardOverview({
         </div>
       </div>
 
-      <div className="mt-5">
-        <Suspense fallback={<AllocationSkeleton />}>
-          <AllocationPanel
-            allocation={snapshot.allocation}
+      <div className="mt-4 grid gap-4 xl:grid-cols-12 xl:items-start">
+        <div className="xl:col-span-5">
+          <PortfolioReportRisk analytics={snapshot.analytics} />
+        </div>
+        <div className="xl:col-span-7">
+          <PortfolioReportTopHoldings
+            holdings={snapshot.holdings}
             currency={snapshot.snapshot.base_currency}
-            moduleError={allocationError}
           />
-        </Suspense>
+        </div>
       </div>
 
-      <div className="mt-5">
+      <div
+        id="detailed-holdings"
+        className="portfolio-report-secondary mt-5"
+      >
         <LazySection fallback={<HoldingsSkeleton />}>
           <Suspense fallback={<HoldingsSkeleton />}>
             <HoldingsPanel
@@ -313,7 +333,7 @@ export function DashboardOverview({
         </LazySection>
       </div>
 
-      <div className="mt-5">
+      <div className="portfolio-report-secondary mt-5">
         <LazySection fallback={<MoversSkeleton />}>
           <Suspense fallback={<MoversSkeleton />}>
             <MoversPanel
@@ -325,7 +345,7 @@ export function DashboardOverview({
         </LazySection>
       </div>
 
-      <div className="mt-5">
+      <div className="portfolio-report-secondary mt-5">
         <LazySection fallback={<ReviewItemsSkeleton />}>
           <Suspense fallback={<ReviewItemsSkeleton />}>
             <ReviewItemsPanel

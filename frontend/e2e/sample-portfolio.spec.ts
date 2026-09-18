@@ -15,16 +15,15 @@ test("sample portfolio exposes deterministic dashboard and portfolio analytics",
   await expect(currentValueRow).toBeVisible();
   await expect(currentValueRow).not.toContainText("Not available");
 
-  const dashboardPeriodControls = page.getByRole("region", {
-    name: "Dashboard period controls",
+  const dashboardPeriodControls = page.getByRole("group", {
+    name: "Portfolio report date range",
   });
-  await dashboardPeriodControls.getByRole("button", { name: "6M" }).click();
+  await dashboardPeriodControls.getByRole("button", { name: "3Y" }).click();
 
-  const analysisLink = page.getByRole("link", {
-    name: /View portfolio analysis/,
-  });
-  await expect(analysisLink).toHaveAttribute("href", /range=6M/);
-  await analysisLink.click();
+  await expect(page).toHaveURL(/range=3Y/);
+  await page.goto(
+    page.url().replace(/\/dashboard\?range=3Y$/, "/analysis?range=3Y"),
+  );
 
   await expect(
     page.getByRole("heading", { name: "Analytical results" }),
@@ -57,4 +56,24 @@ test("sample portfolio exposes deterministic dashboard and portfolio analytics",
     "href",
     /range=1W/,
   );
+});
+test("portfolio report exposes print-friendly content without application chrome", async ({
+  page,
+}) => {
+  await loginSampleUser(page);
+  await openSampleDashboard(page);
+
+  await expect(
+    page.getByRole("button", { name: "Print / Export PDF" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /portfolio/i }).first(),
+  ).toBeVisible();
+
+  await page.emulateMedia({ media: "print" });
+
+  await expect(page.locator(".app-shell-navigation").first()).toBeHidden();
+  await expect(page.locator(".app-shell-topbar")).toBeHidden();
+  await expect(page.locator(".portfolio-report-page")).toBeVisible();
+  await expect(page.locator(".portfolio-report-footer")).toBeVisible();
 });

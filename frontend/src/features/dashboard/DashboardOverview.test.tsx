@@ -1,6 +1,7 @@
 import {
   render,
   screen,
+  within,
 } from "@testing-library/react";
 
 import type { DashboardSnapshotResult } from "../../types/dashboard";
@@ -353,11 +354,31 @@ describe("DashboardOverview", () => {
     );
 
     expect(
-      screen.getByText("Portfolio performance"),
+      screen.getByText("Cumulative performance vs benchmark"),
     ).toBeInTheDocument();
 
     expect(
       screen.getByText("Portfolio summary"),
+    ).toBeInTheDocument();
+
+    const keyMetrics = screen.getByRole("region", {
+      name: "Portfolio report key metrics",
+    });
+
+    for (const label of [
+      "Portfolio value",
+      "Cumulative return",
+      "Sharpe ratio",
+      "Annualized volatility",
+    ]) {
+      expect(within(keyMetrics).getByText(label)).toBeInTheDocument();
+    }
+
+    expect(
+      screen.getByRole("heading", { name: "Risk metrics" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Top holdings" }),
     ).toBeInTheDocument();
 
     expect(

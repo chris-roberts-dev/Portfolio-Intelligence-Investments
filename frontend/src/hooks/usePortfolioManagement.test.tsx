@@ -200,6 +200,9 @@ describe("portfolio management query invalidation", () => {
     });
 
     expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["portfolios"],
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ["portfolio-transactions", PORTFOLIO_ID],
     });
     expect(invalidateSpy).toHaveBeenCalledWith({
@@ -244,6 +247,9 @@ describe("portfolio management query invalidation", () => {
       await result.current.mutateAsync({ csv_text: "csv" });
     });
 
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["portfolios"],
+    });
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ["portfolio-transactions", PORTFOLIO_ID],
     });

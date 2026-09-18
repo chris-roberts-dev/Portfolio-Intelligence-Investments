@@ -1254,8 +1254,9 @@ paths:
   /api/v1/portfolios/{portfolio_id}/transactions/import/confirm/:
     post:
       operationId: portfolio_transaction_import_confirm
-      description: Re-parse, revalidate, replay, and atomically commit the documented
-        CSV transaction format. Any invalid row prevents the complete import.
+      description: Re-resolve ticker symbols when present, then re-parse, revalidate,
+        replay, and atomically commit the documented CSV transaction format. Any invalid
+        row prevents the complete transaction import.
       parameters:
       - in: path
         name: portfolio_id
@@ -1300,12 +1301,20 @@ paths:
               schema:
                 $ref: '#/components/schemas/PortfolioApiError'
           description: The portfolio does not exist in the authenticated user's scope.
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: Ticker discovery is unavailable for a symbol-format CSV.
   /api/v1/portfolios/{portfolio_id}/transactions/import/preview/:
     post:
       operationId: portfolio_transaction_import_preview
       description: Parse and validate the documented CSV transaction format without
-        persisting rows. Preview uses the same transaction model validation and ledger
-        replay rules as confirmation.
+        persisting transaction rows. The preferred asset_symbol format resolves ticker
+        symbols through the canonical asset-discovery boundary before ledger validation;
+        the legacy asset_id format remains accepted. Preview uses the same transaction
+        model validation and ledger replay rules as confirmation.
       parameters:
       - in: path
         name: portfolio_id
@@ -1349,6 +1358,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/PortfolioApiError'
           description: The portfolio does not exist in the authenticated user's scope.
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioApiError'
+          description: Ticker discovery is unavailable for a symbol-format CSV.
   /api/v1/rebalance-simulations/:
     get:
       operationId: rebalance_simulation_list
@@ -4543,6 +4558,11 @@ components:
           format: uuid
           readOnly: true
           nullable: true
+        ledger_inception_at:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -4556,6 +4576,7 @@ components:
       - benchmark_asset_id
       - created_at
       - id
+      - ledger_inception_at
       - name
       - updated_at
     PortfolioSummaryUnavailableReasonEnum:

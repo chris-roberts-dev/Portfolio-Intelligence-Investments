@@ -143,14 +143,14 @@ function OverviewContent({
   ytdSnapshot,
   inceptionSnapshot,
   portfolioName,
-  portfolioCreatedAt,
+  portfolioInceptionAt,
   range,
 }: {
   snapshot: DashboardSnapshotResult;
   ytdSnapshot: DashboardSnapshotResult | undefined;
   inceptionSnapshot: DashboardSnapshotResult | undefined;
   portfolioName: string;
-  portfolioCreatedAt: string;
+  portfolioInceptionAt: string;
   range: OverviewRange;
 }) {
   const currency = snapshot.snapshot.base_currency;
@@ -206,7 +206,7 @@ function OverviewContent({
             label="Since Inception"
             value={formatPercent(inceptionReturn, 1)}
             valueTone={percentTone(inceptionReturn)}
-            context={`Since ${formatDate(portfolioCreatedAt.split("T")[0] ?? portfolioCreatedAt)}`}
+            context={`Since ${formatDate(portfolioInceptionAt.split("T")[0] ?? portfolioInceptionAt)}`}
           />
           <OverviewKpiCard
             label="Investment Gain/Loss"
@@ -432,44 +432,57 @@ export function HomePage() {
     );
   }, [allPortfoliosSelected, portfoliosQuery.data, requestedPortfolio]);
 
+  const portfolioInceptionAt = selectedPortfolio
+    ? selectedPortfolio.ledger_inception_at ?? selectedPortfolio.created_at
+    : null;
+
   const selectedRequest = useMemo(() => {
     if (!selectedPortfolio) {
       return null;
     }
 
-    const dates = resolveOverviewDateRange(range, selectedPortfolio.created_at);
+    const dates = resolveOverviewDateRange(
+      range,
+      portfolioInceptionAt ?? selectedPortfolio.created_at,
+    );
     return {
       portfolioId: selectedPortfolio.id,
       start: dates.start,
       end: dates.end,
     };
-  }, [range, selectedPortfolio]);
+  }, [portfolioInceptionAt, range, selectedPortfolio]);
 
   const ytdRequest = useMemo(() => {
     if (!selectedPortfolio) {
       return null;
     }
 
-    const dates = resolveOverviewDateRange("YTD", selectedPortfolio.created_at);
+    const dates = resolveOverviewDateRange(
+      "YTD",
+      portfolioInceptionAt ?? selectedPortfolio.created_at,
+    );
     return {
       portfolioId: selectedPortfolio.id,
       start: dates.start,
       end: dates.end,
     };
-  }, [selectedPortfolio]);
+  }, [portfolioInceptionAt, selectedPortfolio]);
 
   const inceptionRequest = useMemo(() => {
     if (!selectedPortfolio) {
       return null;
     }
 
-    const dates = resolveOverviewDateRange("MAX", selectedPortfolio.created_at);
+    const dates = resolveOverviewDateRange(
+      "MAX",
+      portfolioInceptionAt ?? selectedPortfolio.created_at,
+    );
     return {
       portfolioId: selectedPortfolio.id,
       start: dates.start,
       end: dates.end,
     };
-  }, [selectedPortfolio]);
+  }, [portfolioInceptionAt, selectedPortfolio]);
 
   const snapshotQuery = useDashboardSnapshot(selectedRequest);
   const ytdSnapshotQuery = useDashboardSnapshot(ytdRequest);
@@ -657,7 +670,7 @@ export function HomePage() {
             ytdSnapshot={ytdSnapshotQuery.data}
             inceptionSnapshot={inceptionSnapshotQuery.data}
             portfolioName={selectedPortfolio.name}
-            portfolioCreatedAt={selectedPortfolio.created_at}
+            portfolioInceptionAt={portfolioInceptionAt ?? selectedPortfolio.created_at}
             range={range}
           />
         </>

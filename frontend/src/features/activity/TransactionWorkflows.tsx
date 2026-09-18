@@ -13,23 +13,33 @@ import {
   DOMAIN_SECONDARY_ACTION_CLASS,
 } from "../../components/ui/domainStyles";
 import {
+  apiFieldErrors,
+  firstFieldError,
+} from "../portfolioManagement/apiErrors";
+import {
   useAssetCatalog,
   useConfirmPortfolioTransactionImport,
   useCreatePortfolioTransaction,
   usePortfolioTransactions,
   usePreviewPortfolioTransactionImport,
+  useResolveAssets,
 } from "../../hooks/usePortfolioData";
 import type {
+  AssetCatalogItem,
   PortfolioTransactionCreateRequest,
   TransactionImportPreview,
   TransactionType,
 } from "../../types/portfolioManagement";
-import {
-  apiFieldErrors,
-  firstFieldError,
-} from "../portfolioManagement/apiErrors";
 
 const MAX_TRANSACTION_IMPORT_BYTES = 256 * 1024;
+const USER_TRANSACTION_CSV_TEMPLATE = [
+  "transaction_type,occurred_at,asset_symbol,quantity,price,fees,cash_amount",
+  "DEPOSIT,2026-01-02T14:00:00Z,,,,0,10000.00",
+  "BUY,2026-01-03T15:30:00Z,AAPL,10,200.00,1.00,",
+].join("\n");
+const USER_TRANSACTION_CSV_TEMPLATE_URL = `data:text/csv;charset=utf-8,${encodeURIComponent(
+  USER_TRANSACTION_CSV_TEMPLATE,
+)}`;
 
 function localDateTimeInputValue(): string {
   const now = new Date();
@@ -109,6 +119,7 @@ export function TransactionWorkflows({
   const assetCatalogQuery = useAssetCatalog();
   const transactionsQuery = usePortfolioTransactions(portfolioId);
   const transactionMutation = useCreatePortfolioTransaction(portfolioId);
+  const resolveAssetsMutation = useResolveAssets();
   const previewMutation = usePreviewPortfolioTransactionImport(portfolioId);
   const confirmMutation = useConfirmPortfolioTransactionImport(portfolioId);
 
@@ -116,6 +127,10 @@ export function TransactionWorkflows({
     useState<TransactionType>("DEPOSIT");
   const [occurredAt, setOccurredAt] = useState(localDateTimeInputValue);
   const [assetId, setAssetId] = useState("");
+  const [assetSymbolInput, setAssetSymbolInput] = useState("");
+  const [assetResolutionMessage, setAssetResolutionMessage] = useState<string | null>(
+    null,
+  );
   const [quantity, setQuantity] = useState("");
   const [price, setPrice] = useState("");
   const [fees, setFees] = useState("0");
@@ -149,6 +164,56 @@ export function TransactionWorkflows({
     () => assetCatalogQuery.data ?? [],
     [assetCatalogQuery.data],
   );
+  const selectedAsset = useMemo(
+    () => assetOptions.find((asset) => asset.id === assetId) ?? null,
+    [assetId, assetOptions],
+  );
+
+  async function resolveTickerSymbol(): Promise<AssetCatalogItem | null> {
+    const symbol = assetSymbolInput.trim().toUpperCase();
+    setAssetResolutionMessage(null);
+
+    if (!symbol) {
+      setAssetResolutionMessage("Enter a ticker symbol to resolve.");
+      return null;
+    }
+
+    const existing = assetOptions.find((asset) => asset.symbol === symbol);
+    if (existing) {
+      setAssetId(existing.id);
+      setAssetSymbolInput(existing.symbol);
+      setAssetResolutionMessage(
+        `${existing.symbol} is already available as a canonical asset.`,
+      );
+      return existing;
+    }
+
+    try {
+      const result = await resolveAssetsMutation.mutateAsync({ symbols: [symbol] });
+      const outcome = result.outcomes[0];
+      if (outcome?.status === "RESOLVED" && outcome.asset) {
+        setAssetId(outcome.asset.id);
+        setAssetSymbolInput(outcome.asset.symbol);
+        setAssetResolutionMessage(
+          `${outcome.asset.symbol} resolved to ${outcome.asset.name}.`,
+        );
+        return outcome.asset;
+      }
+
+      setAssetId("");
+      setAssetResolutionMessage(
+        outcome?.warning ??
+          `${symbol} could not be resolved to a supported canonical USD stock or ETF.`,
+      );
+      return null;
+    } catch (error) {
+      setAssetId("");
+      setAssetResolutionMessage(
+        error instanceof Error ? error.message : "Ticker resolution failed.",
+      );
+      return null;
+    }
+  }
 
   async function handleTransactionSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -169,7 +234,11 @@ export function TransactionWorkflows({
     };
 
     if (requiresAsset) {
-      request.asset_id = assetId || null;
+      let canonicalAssetId = assetId;
+      if (!canonicalAssetId && assetSymbolInput.trim()) {
+        canonicalAssetId = (await resolveTickerSymbol())?.id ?? "";
+      }
+      request.asset_id = canonicalAssetId || null;
     }
 
     if (requiresQuantityPrice) {
@@ -422,6 +491,9 @@ export function TransactionWorkflows({
               onChange={(event) => {
                 setTransactionType(event.target.value as TransactionType);
                 setAssetId("");
+                setAssetSymbolInput("");
+                setAssetResolutionMessage(null);
+                resolveAssetsMutation.reset();
                 setQuantity("");
                 setPrice("");
                 setFees("0");
@@ -454,28 +526,102 @@ export function TransactionWorkflows({
           </label>
 
           {requiresAsset ? (
-            <label className="text-sm font-medium text-slate-700 sm:col-span-2">
-              Canonical asset
-              <select
-                value={assetId}
-                required
-                disabled={
-                  assetCatalogQuery.isPending ||
-                  assetCatalogQuery.error instanceof Error
-                }
-                onChange={(event) => setAssetId(event.target.value)}
-                aria-invalid={
-                  firstFieldError(transactionErrors, "asset_id") !== null
-                }
-                className={`mt-1 block w-full ${DOMAIN_CONTROL_CLASS} disabled:opacity-50`}
-              >
-                <option value="">Select an asset</option>
-                {assetOptions.map((asset) => (
-                  <option key={asset.id} value={asset.id}>
-                    {asset.symbol} — {asset.name} ({asset.exchange})
-                  </option>
-                ))}
-              </select>
+            <div className="sm:col-span-2">
+              <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="min-w-[14rem] flex-1 text-sm font-medium text-slate-700">
+                    Ticker symbol
+                    <input
+                      type="text"
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                      value={assetSymbolInput}
+                      onChange={(event) => {
+                        setAssetSymbolInput(event.target.value.toUpperCase());
+                        setAssetId("");
+                        setAssetResolutionMessage(null);
+                        resolveAssetsMutation.reset();
+                      }}
+                      placeholder="e.g. AAPL or VTI"
+                      className={`mt-1 block w-full uppercase ${DOMAIN_CONTROL_CLASS}`}
+                      aria-describedby="ticker-resolution-help"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={
+                      !assetSymbolInput.trim() || resolveAssetsMutation.isPending
+                    }
+                    onClick={() => void resolveTickerSymbol()}
+                    className={DOMAIN_SECONDARY_ACTION_CLASS}
+                  >
+                    {resolveAssetsMutation.isPending ? "Resolving…" : "Resolve ticker"}
+                  </button>
+                </div>
+                <p
+                  id="ticker-resolution-help"
+                  className="mt-2 text-xs leading-5 text-slate-600"
+                >
+                  Enter the ticker you know. The server resolves or discovers the
+                  supported security and uses its canonical UUID internally; you do
+                  not need to look up an ID first.
+                </p>
+                {assetResolutionMessage ? (
+                  <p
+                    className={`mt-2 text-sm ${
+                      assetId ? "text-emerald-700" : "text-rose-700"
+                    }`}
+                    role="status"
+                  >
+                    {assetResolutionMessage}
+                  </p>
+                ) : null}
+              </div>
+
+              <label className="mt-3 block text-sm font-medium text-slate-700">
+                Resolved / existing asset
+                <select
+                  value={assetId}
+                  required
+                  disabled={
+                    assetCatalogQuery.isPending ||
+                    assetCatalogQuery.error instanceof Error
+                  }
+                  onChange={(event) => {
+                    const nextId = event.target.value;
+                    setAssetId(nextId);
+                    const nextAsset = assetOptions.find((asset) => asset.id === nextId);
+                    setAssetSymbolInput(nextAsset?.symbol ?? "");
+                    setAssetResolutionMessage(null);
+                  }}
+                  aria-invalid={
+                    firstFieldError(transactionErrors, "asset_id") !== null
+                  }
+                  className={`mt-1 block w-full ${DOMAIN_CONTROL_CLASS} disabled:opacity-50`}
+                >
+                  <option value="">Resolve a ticker or choose an existing asset</option>
+                  {assetOptions.map((asset) => (
+                    <option key={asset.id} value={asset.id}>
+                      {asset.symbol} — {asset.name} ({asset.exchange})
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {selectedAsset ? (
+                <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  <span className="font-semibold text-slate-800">
+                    {selectedAsset.symbol} · {selectedAsset.name}
+                  </span>
+                  <span className="ml-2">
+                    {selectedAsset.exchange} · {selectedAsset.currency}
+                  </span>
+                  <code className="mt-1 block break-all font-mono text-[11px] text-slate-500">
+                    Canonical ID: {selectedAsset.id}
+                  </code>
+                </div>
+              ) : null}
+
               {firstFieldError(transactionErrors, "asset_id") ? (
                 <span className="mt-1 block text-sm font-normal text-rose-700">
                   {firstFieldError(transactionErrors, "asset_id")}
@@ -492,7 +638,7 @@ export function TransactionWorkflows({
                   </button>
                 </span>
               ) : null}
-            </label>
+            </div>
           ) : null}
 
           {requiresQuantityPrice ? (
@@ -617,14 +763,22 @@ export function TransactionWorkflows({
               Import transactions from CSV
             </h2>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-              Preview never persists rows. Confirmation revalidates the file
-              and commits only when every row passes canonical transaction and
-              long-only ledger validation.
+              Use ticker symbols directly in the preferred CSV format. Preview
+              resolves supported tickers to canonical assets, validates the ledger,
+              and never persists transaction rows. Confirmation re-resolves and
+              commits only when every row passes validation.
             </p>
           </div>
-          <span className="text-xs font-medium text-slate-500">
-            Format: docs/transaction-import.md
-          </span>
+          <div className="flex flex-wrap items-center gap-3 text-xs font-medium">
+            <a
+              href={USER_TRANSACTION_CSV_TEMPLATE_URL}
+              download="portfolio-transactions-template.csv"
+              className="text-blue-700 underline decoration-blue-200 underline-offset-4 hover:text-blue-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              Download ticker CSV template
+            </a>
+            <span className="text-slate-500">Format: docs/transaction-import.md</span>
+          </div>
         </div>
 
         <div className="mt-5 flex flex-wrap items-end gap-3">
@@ -644,7 +798,7 @@ export function TransactionWorkflows({
             onClick={() => void handlePreviewImport()}
             className={DOMAIN_SECONDARY_ACTION_CLASS}
           >
-            {previewMutation.isPending ? "Validating…" : "Validate and preview"}
+            {previewMutation.isPending ? "Resolving and validating…" : "Resolve tickers and preview"}
           </button>
         </div>
 
@@ -718,7 +872,16 @@ export function TransactionWorkflows({
                       <td className="px-3 py-3">{displayValue(row.transaction_type)}</td>
                       <td className="px-3 py-3">{displayValue(row.occurred_at)}</td>
                       <td className="px-3 py-3">
-                        {row.asset_symbol ?? displayValue(row.asset_id)}
+                        <div>
+                          <span className="font-semibold text-slate-900">
+                            {row.asset_symbol ?? (row.asset_id ? "Canonical asset" : "—")}
+                          </span>
+                          {row.asset_id ? (
+                            <code className="mt-0.5 block break-all font-mono text-[10px] text-slate-500">
+                              {row.asset_id}
+                            </code>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-3 py-3 tabular-nums">
                         {displayValue(row.quantity)}
