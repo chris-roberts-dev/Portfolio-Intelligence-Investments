@@ -67,15 +67,13 @@ function queryClient(): QueryClient {
   return client;
 }
 
-function renderPage() {
+function renderPage(initialEntry = "/market-data") {
   return render(
     <QueryClientProvider
       client={queryClient()}
     >
       <MemoryRouter
-        initialEntries={[
-          "/market-data",
-        ]}
+        initialEntries={[initialEntry]}
       >
         <MarketDataExplorerPage />
       </MemoryRouter>
@@ -236,6 +234,70 @@ describe(
       expect(
         fetchMock,
       ).not.toHaveBeenCalled();
+    });
+
+
+    it("auto-opens a canonical portfolio holding drill-down while preserving return context", async () => {
+      const assetId = "00000000-0000-0000-0000-000000000011";
+      const portfolioId = "00000000-0000-0000-0000-000000000002";
+      const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body)) as {
+          symbols: string[];
+          start: string;
+          end: string;
+          interval: string;
+        };
+
+        expect(body).toEqual({
+          symbols: ["AAPL"],
+          start: "2026-06-18",
+          end: "2026-09-19",
+          interval: "1d",
+        });
+
+        return new Response(
+          JSON.stringify({
+            results: [successfulResult("AAPL", assetId, 225)],
+            meta: {
+              provider: "mock",
+              retrieved_at: "2026-09-18T20:00:00Z",
+              interval: "1d",
+              start: "2026-06-18",
+              end: "2026-09-19",
+            },
+            row_count: 1,
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      });
+
+      vi.stubGlobal("fetch", fetchMock);
+
+      renderPage(
+        `/market-data?symbol=AAPL&asset=${assetId}&start=2026-06-18&end=2026-09-19&portfolio=${portfolioId}&range=3M&view=holdings`,
+      );
+
+      expect(
+        screen.getByRole("region", { name: "Portfolio research context" }),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText("Ticker symbols")).toHaveValue("AAPL");
+      expect(screen.getByLabelText("Start")).toHaveValue("2026-06-18");
+      expect(screen.getByLabelText("End (exclusive)")).toHaveValue("2026-09-19");
+
+      expect(
+        await screen.findByTestId("market-price-chart"),
+      ).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      expect(
+        screen.getByRole("link", { name: "Back to portfolio holding" }),
+      ).toHaveAttribute(
+        "href",
+        `/portfolios/${portfolioId}/holdings/${assetId}?range=3M&view=holdings`,
+      );
     });
 
     it("preserves partial success, warnings, provenance, and successful charts", async () => {

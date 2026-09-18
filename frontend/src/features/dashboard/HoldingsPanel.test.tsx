@@ -100,7 +100,7 @@ function renderPanel() {
   return render(
     <MemoryRouter
       initialEntries={[
-        `/portfolios/${PORTFOLIO_ID}/dashboard?range=3M`,
+        `/portfolios/${PORTFOLIO_ID}/dashboard?range=3M&view=holdings`,
       ]}
     >
       <HoldingsPanel
@@ -128,7 +128,7 @@ describe("HoldingsPanel", () => {
     expect(links[0]).toHaveAccessibleName("Open BBB holding details");
     expect(links[1]).toHaveAccessibleName("Open AAA holding details");
     expect(links[0]?.getAttribute("href")).toBe(
-      `/portfolios/${PORTFOLIO_ID}/holdings/00000000-0000-0000-0000-000000000012?range=3M`,
+      `/portfolios/${PORTFOLIO_ID}/holdings/00000000-0000-0000-0000-000000000012?range=3M&view=holdings`,
     );
     expect(screen.getByTestId("sparkline-BBB")).toBeInTheDocument();
   });

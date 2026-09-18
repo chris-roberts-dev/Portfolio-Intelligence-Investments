@@ -4,6 +4,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import { Link, useSearchParams } from "react-router";
 
 import { ApiError } from "../api/client";
 import { MarketCandlestickChart } from "../components/charts/MarketCandlestickChart";
@@ -274,17 +275,31 @@ function SymbolResultCard({
 }
 
 export function MarketDataExplorerPage() {
+  const [searchParams] = useSearchParams();
   const defaults = defaultDateRange();
+  const deepLinkSymbols = parseMarketSymbols(searchParams.get("symbol") ?? "");
+  const deepLinkSymbol = deepLinkSymbols[0] ?? "";
+  const deepLinkStart = searchParams.get("start") ?? "";
+  const deepLinkEnd = searchParams.get("end") ?? "";
+  const deepLinkIsValid =
+    deepLinkSymbol.length > 0 &&
+    deepLinkStart.length > 0 &&
+    deepLinkEnd.length > 0 &&
+    deepLinkStart < deepLinkEnd;
+  const originPortfolioId = searchParams.get("portfolio");
+  const originAssetId = searchParams.get("asset");
+  const originRange = searchParams.get("range");
+  const originView = searchParams.get("view");
 
   const [symbolInput, setSymbolInput] =
-    useState("");
+    useState(deepLinkSymbol);
 
   const [start, setStart] = useState(
-    defaults.start,
+    deepLinkIsValid ? deepLinkStart : defaults.start,
   );
 
   const [end, setEnd] = useState(
-    defaults.end,
+    deepLinkIsValid ? deepLinkEnd : defaults.end,
   );
 
   const [
@@ -292,13 +307,22 @@ export function MarketDataExplorerPage() {
     setSubmittedRequest,
   ] =
     useState<MarketBarQueryRequest | null>(
-      null,
+      deepLinkIsValid
+        ? {
+            symbols: [deepLinkSymbol],
+            start: deepLinkStart,
+            end: deepLinkEnd,
+            interval: "1d",
+          }
+        : null,
     );
 
   const [
     selectedSymbol,
     setSelectedSymbol,
-  ] = useState<string | null>(null);
+  ] = useState<string | null>(
+    deepLinkIsValid ? deepLinkSymbol : null,
+  );
 
   const [formError, setFormError] =
     useState<string | null>(null);
@@ -313,6 +337,26 @@ export function MarketDataExplorerPage() {
     useMarketBarQuery(submittedRequest);
 
   const result = marketQuery.data;
+  const originResult =
+    deepLinkSymbol.length > 0
+      ? result?.results.find((candidate) => candidate.symbol === deepLinkSymbol) ?? null
+      : null;
+  const originResolvedAssetId = originResult?.asset_id ?? null;
+  const originIdentityMismatch =
+    originAssetId !== null &&
+    originResolvedAssetId !== null &&
+    originResolvedAssetId !== originAssetId;
+  const portfolioReturnPath =
+    originPortfolioId && originAssetId
+      ? (() => {
+          const next = new URLSearchParams();
+          if (originRange) {
+            next.set("range", originRange);
+          }
+          next.set("view", originView ?? "holdings");
+          return `/portfolios/${encodeURIComponent(originPortfolioId)}/holdings/${encodeURIComponent(originAssetId)}?${next.toString()}`;
+        })()
+      : null;
 
   /*
    * These derived arrays intentionally retain the same reference while the
@@ -449,6 +493,35 @@ export function MarketDataExplorerPage() {
 
   return (
     <DashboardShell header={header}>
+      {portfolioReturnPath ? (
+        <section
+          className="mb-5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm text-blue-950"
+          aria-label="Portfolio research context"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold">Opened from a portfolio holding</p>
+              <p className="mt-1 text-xs leading-5 text-blue-900">
+                {deepLinkSymbol || "Security"} · Canonical asset{" "}
+                <code className="break-all font-mono">{originAssetId}</code> · Portfolio range{" "}
+                {originRange ?? "preserved"}
+              </p>
+            </div>
+            <Link
+              to={portfolioReturnPath}
+              className="inline-flex min-h-9 items-center rounded-lg border border-blue-300 bg-white px-3 text-xs font-semibold text-blue-800 outline-none hover:bg-blue-100 focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              Back to portfolio holding
+            </Link>
+          </div>
+          {originIdentityMismatch ? (
+            <p className="mt-3 font-medium text-rose-800" role="alert">
+              Canonical identity mismatch: this query resolved {deepLinkSymbol} to {originResolvedAssetId}, not the originating portfolio asset {originAssetId}.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div className="max-w-3xl">
           <h2 className="text-lg font-semibold tracking-tight text-slate-950">

@@ -1,4 +1,4 @@
-import { resolveDashboardDateRange } from "./dateRange";
+import { isDashboardRange, resolveDashboardDateRange } from "./dateRange";
 
 describe("resolveDashboardDateRange", () => {
   const now = new Date(2026, 8, 18, 12, 0, 0);
@@ -51,5 +51,15 @@ describe("resolveDashboardDateRange", () => {
     expect(
       resolveDashboardDateRange("5Y", "2020-01-01T00:00:00Z", null, now),
     ).toEqual({ start: "2021-09-18", end: "2026-09-19" });
+  });
+});
+
+
+describe("isDashboardRange", () => {
+  it("accepts supported report and dashboard ranges only", () => {
+    expect(isDashboardRange("3Y")).toBe(true);
+    expect(isDashboardRange("ALL")).toBe(true);
+    expect(isDashboardRange("MAX")).toBe(false);
+    expect(isDashboardRange(null)).toBe(false);
   });
 });

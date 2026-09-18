@@ -200,7 +200,13 @@ function dashboardSnapshot() {
       observations: 180,
       benchmark_observations: 180,
       cumulative_return: 0.128,
-      cagr: null,
+      cagr: {
+        value: 0.095,
+        wealth_ratio: 1.128,
+        elapsed_days: 260,
+        elapsed_years: 0.712,
+        is_short_period: true,
+      },
       annualized_volatility: 0.117,
       sharpe: null,
       sortino: null,
@@ -303,6 +309,9 @@ describe("HomePage overview", () => {
     expect(screen.getByText("$125,000.00")).toBeInTheDocument();
     expect(screen.getByText("YTD Return")).toBeInTheDocument();
     expect(screen.getByText("Since Inception")).toBeInTheDocument();
+    expect(screen.getByText("CAGR")).toBeInTheDocument();
+    expect(screen.getByText("+9.5%")).toBeInTheDocument();
+    expect(screen.queryByText("Net Contributions")).not.toBeInTheDocument();
     expect(screen.getByText("Risk Level")).toBeInTheDocument();
     expect(screen.getByTestId("overview-performance-chart")).toBeInTheDocument();
     expect(screen.getByTestId("overview-allocation-chart")).toBeInTheDocument();

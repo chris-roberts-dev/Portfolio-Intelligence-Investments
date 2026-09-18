@@ -10,6 +10,7 @@ import {
   type PortfolioReportView,
 } from "../features/dashboard/PortfolioReportSubview";
 import {
+  isDashboardRange,
   resolveDashboardDateRange,
   type DashboardRange,
 } from "../features/dashboard/dateRange";
@@ -29,19 +30,6 @@ const REPORT_RANGES: readonly DashboardRange[] = [
   "5Y",
   "ALL",
 ];
-const ALL_DASHBOARD_RANGES: readonly DashboardRange[] = [
-  "1W",
-  "1M",
-  "3M",
-  "6M",
-  "MTD",
-  "QTD",
-  "YTD",
-  "1Y",
-  "3Y",
-  "5Y",
-  "ALL",
-];
 const REPORT_NAVIGATION: readonly PortfolioReportView[] = [
   "report",
   "holdings",
@@ -50,10 +38,6 @@ const REPORT_NAVIGATION: readonly PortfolioReportView[] = [
   "risk",
   "transactions",
 ];
-
-function isDashboardRange(value: string | null): value is DashboardRange {
-  return value !== null && ALL_DASHBOARD_RANGES.includes(value as DashboardRange);
-}
 
 function inclusiveEndDate(endExclusive: string): string {
   const [year, month, day] = endExclusive.split("-").map(Number);

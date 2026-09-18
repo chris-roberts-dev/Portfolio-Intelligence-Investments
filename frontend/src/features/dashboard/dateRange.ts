@@ -25,6 +25,10 @@ export const DASHBOARD_RANGES: readonly DashboardRange[] = [
   "ALL",
 ];
 
+export function isDashboardRange(value: string | null): value is DashboardRange {
+  return value !== null && DASHBOARD_RANGES.includes(value as DashboardRange);
+}
+
 function startOfLocalDay(value: Date): Date {
   return new Date(value.getFullYear(), value.getMonth(), value.getDate());
 }

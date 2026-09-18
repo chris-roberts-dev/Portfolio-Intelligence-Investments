@@ -1,3 +1,5 @@
+import { Link, useLocation } from "react-router";
+
 import type { DashboardHoldingsResult } from "../../types/dashboard";
 import { formatCurrency, formatPercent } from "./formatting";
 
@@ -10,9 +12,18 @@ export function PortfolioReportTopHoldings({
   holdings,
   currency,
 }: PortfolioReportTopHoldingsProps) {
+  const location = useLocation();
   const topHoldings = [...(holdings?.holdings ?? [])]
     .sort((left, right) => (right.weight ?? -1) - (left.weight ?? -1))
     .slice(0, 5);
+
+  function researchHref(assetId: string): string {
+    if (!holdings) {
+      return "#";
+    }
+
+    return `/portfolios/${encodeURIComponent(holdings.provenance.portfolio_id)}/holdings/${encodeURIComponent(assetId)}${location.search}`;
+  }
 
   return (
     <section
@@ -56,8 +67,23 @@ export function PortfolioReportTopHoldings({
               {topHoldings.map((holding) => (
                 <tr key={holding.asset_id}>
                   <th scope="row" className="py-2.5 pr-4 font-medium text-slate-900">
-                    <span className="font-semibold">{holding.symbol}</span>
-                    <span className="ml-1 text-xs font-normal text-slate-500">· {holding.name}</span>
+                    <Link
+                      to={researchHref(holding.asset_id)}
+                      state={{
+                        holding: {
+                          assetId: holding.asset_id,
+                          symbol: holding.symbol,
+                          name: holding.name,
+                          assetType: holding.asset_type,
+                          currency: holding.currency,
+                        },
+                      }}
+                      className="inline-flex flex-wrap items-baseline gap-x-1 rounded-sm outline-none hover:text-blue-700 focus-visible:ring-2 focus-visible:ring-blue-500"
+                      aria-label={`Research ${holding.symbol} holding`}
+                    >
+                      <span className="font-semibold">{holding.symbol}</span>
+                      <span className="text-xs font-normal text-slate-500">· {holding.name}</span>
+                    </Link>
                   </th>
                   <td className="py-2.5 text-right tabular-nums text-slate-700">{formatPercent(holding.weight, 1)}</td>
                   <td className="py-2.5 text-right tabular-nums text-slate-700">{formatCurrency(holding.market_value, currency)}</td>

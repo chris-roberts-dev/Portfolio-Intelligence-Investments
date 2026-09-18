@@ -163,16 +163,16 @@ export function PortfoliosPage() {
 
                   <div className="mt-5 flex flex-wrap gap-2">
                     <Link
-                      to={`/?portfolio=${encodeURIComponent(portfolio.id)}&range=YTD`}
+                      to={`/portfolios/${portfolio.id}/dashboard?range=YTD`}
                       className="inline-flex min-h-9 items-center rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white outline-none hover:bg-blue-700 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                     >
-                      Open Overview
+                      Portfolio dashboard
                     </Link>
                     <Link
-                      to={`/portfolios/${portfolio.id}/dashboard?range=1M`}
+                      to={`/?portfolio=${encodeURIComponent(portfolio.id)}&range=YTD`}
                       className="inline-flex min-h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500"
                     >
-                      Detailed dashboard
+                      Open Overview
                     </Link>
                     <Link
                       to={`/activity?portfolio=${encodeURIComponent(portfolio.id)}`}

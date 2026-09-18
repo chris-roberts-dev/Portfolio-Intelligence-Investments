@@ -3,6 +3,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 
 import type { DashboardSnapshotResult } from "../../types/dashboard";
 import { DashboardOverview } from "./DashboardOverview";
@@ -344,13 +345,15 @@ function snapshotFixture(): DashboardSnapshotResult {
 describe("DashboardOverview", () => {
   it("renders performance, summary, allocation, holdings, movers, and review items", async () => {
     render(
-      <DashboardOverview
-        snapshot={snapshotFixture()}
-        isLoading={false}
-        isFetching={false}
-        error={null}
-        onRetry={() => undefined}
-      />,
+      <MemoryRouter initialEntries={["/portfolios/portfolio-1/dashboard?range=3Y&view=report"]}>
+        <DashboardOverview
+          snapshot={snapshotFixture()}
+          isLoading={false}
+          isFetching={false}
+          error={null}
+          onRetry={() => undefined}
+        />
+      </MemoryRouter>,
     );
 
     expect(
@@ -368,6 +371,7 @@ describe("DashboardOverview", () => {
     for (const label of [
       "Portfolio value",
       "Cumulative return",
+      "CAGR",
       "Sharpe ratio",
       "Annualized volatility",
     ]) {
@@ -423,13 +427,15 @@ describe("DashboardOverview", () => {
       "STALE";
 
     render(
-      <DashboardOverview
-        snapshot={snapshot}
-        isLoading={false}
-        isFetching={false}
-        error={null}
-        onRetry={() => undefined}
-      />,
+      <MemoryRouter initialEntries={["/portfolios/portfolio-1/dashboard?range=3Y&view=report"]}>
+        <DashboardOverview
+          snapshot={snapshot}
+          isLoading={false}
+          isFetching={false}
+          error={null}
+          onRetry={() => undefined}
+        />
+      </MemoryRouter>,
     );
 
     expect(
@@ -463,13 +469,15 @@ describe("DashboardOverview", () => {
       );
 
     render(
-      <DashboardOverview
-        snapshot={snapshot}
-        isLoading={false}
-        isFetching={false}
-        error={null}
-        onRetry={() => undefined}
-      />,
+      <MemoryRouter initialEntries={["/portfolios/portfolio-1/dashboard?range=3Y&view=report"]}>
+        <DashboardOverview
+          snapshot={snapshot}
+          isLoading={false}
+          isFetching={false}
+          error={null}
+          onRetry={() => undefined}
+        />
+      </MemoryRouter>,
     );
 
     expect(

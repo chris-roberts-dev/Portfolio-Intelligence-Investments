@@ -50,6 +50,7 @@ export function PortfolioReportKpis({ snapshot }: PortfolioReportKpisProps) {
   const cumulativeReturn = snapshot.performance?.summary.cumulative_return ?? null;
   const benchmarkReturn =
     snapshot.performance?.summary.benchmark_cumulative_return ?? null;
+  const cagr = snapshot.analytics?.cagr ?? null;
   const sharpe = snapshot.analytics?.sharpe ?? null;
   const volatility = snapshot.analytics?.annualized_volatility ?? null;
 
@@ -57,7 +58,7 @@ export function PortfolioReportKpis({ snapshot }: PortfolioReportKpisProps) {
     <section
       id="report-summary"
       aria-label="Portfolio report key metrics"
-      className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+      className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"
     >
       <KpiCard
         label="Portfolio value"
@@ -69,6 +70,18 @@ export function PortfolioReportKpis({ snapshot }: PortfolioReportKpisProps) {
         value={formatPercent(cumulativeReturn, 1)}
         valueClassName={valueTone(cumulativeReturn)}
         context={`Benchmark ${formatPercent(benchmarkReturn, 1)} for the same reporting period.`}
+      />
+      <KpiCard
+        label="CAGR"
+        value={formatPercent(cagr?.value ?? null, 1)}
+        valueClassName={valueTone(cagr?.value ?? null)}
+        context={
+          cagr
+            ? `Compound annual growth rate · ${cagr.elapsed_days} elapsed days${
+                cagr.is_short_period ? " · annualized short period" : ""
+              }`
+            : "Compound annual growth rate is not available for the selected period."
+        }
       />
       <KpiCard
         label="Sharpe ratio"

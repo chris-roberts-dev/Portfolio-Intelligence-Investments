@@ -166,6 +166,7 @@ function OverviewContent({
   const inceptionReturn =
     inceptionSnapshot?.performance?.summary.cumulative_return ?? null;
   const investmentGainLoss = performance?.summary.investment_gain_loss ?? null;
+  const cagr = analytics?.cagr ?? null;
   const contributors = movers?.largest_contributors.slice(0, 3) ?? [];
   const detractors = movers?.largest_detractors.slice(0, 1) ?? [];
 
@@ -215,9 +216,16 @@ function OverviewContent({
             context="Selected-period investment result"
           />
           <OverviewKpiCard
-            label="Net Contributions"
-            value={formatCurrency(summary?.metrics.net_contributions ?? null, currency)}
-            context="Contributions less withdrawals in the selected period"
+            label="CAGR"
+            value={formatPercent(cagr?.value ?? null, 1)}
+            valueTone={percentTone(cagr?.value ?? null)}
+            context={
+              cagr
+                ? `Compound annual growth rate · ${cagr.elapsed_days} elapsed days${
+                    cagr.is_short_period ? " · annualized short period" : ""
+                  }`
+                : "Compound annual growth rate is not available for the selected period"
+            }
           />
           <OverviewKpiCard
             label="Risk Level"

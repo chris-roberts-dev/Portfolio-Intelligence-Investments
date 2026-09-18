@@ -129,3 +129,63 @@ test("portfolio report detail navigation preserves portfolio and reporting-perio
     page.getByRole("link", { name: "Open Activity & Transactions" }),
   ).toBeVisible();
 });
+
+test("portfolio holding drill-down preserves canonical asset and reporting context into Market Data research", async ({
+  page,
+}) => {
+  await loginSampleUser(page);
+  await openSampleDashboard(page);
+
+  const rangeControls = page.getByRole("group", {
+    name: "Portfolio report date range",
+  });
+  await rangeControls.getByRole("button", { name: "3Y" }).click();
+  await page.getByRole("link", { name: "Holdings", exact: true }).click();
+
+  const holdingLink = page
+    .getByRole("link", { name: /Open .* holding details/ })
+    .first();
+  await expect(holdingLink).toBeVisible();
+
+  const holdingHref = await holdingLink.getAttribute("href");
+  expect(holdingHref).not.toBeNull();
+  expect(holdingHref).toContain("range=3Y");
+  expect(holdingHref).toContain("view=holdings");
+
+  await holdingLink.focus();
+  await expect(holdingLink).toBeFocused();
+  await page.keyboard.press("Enter");
+
+  await expect(page.getByText("Canonical security identity")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Portfolio position context" }),
+  ).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByText("Canonical security identity")).toBeVisible();
+
+  const explorerLink = page.getByRole("link", {
+    name: "Open in Market Data Explorer",
+  });
+  await expect(explorerLink).toBeVisible();
+
+  const explorerHref = await explorerLink.getAttribute("href");
+  expect(explorerHref).not.toBeNull();
+  expect(explorerHref).toContain("asset=");
+  expect(explorerHref).toContain("portfolio=");
+  expect(explorerHref).toContain("range=3Y");
+  expect(explorerHref).toContain("view=holdings");
+
+  await explorerLink.focus();
+  await expect(explorerLink).toBeFocused();
+  await page.keyboard.press("Enter");
+
+  await expect(page).toHaveURL(/\/market-data\?/);
+  await expect(
+    page.getByRole("region", { name: "Portfolio research context" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Back to portfolio holding" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Ticker symbols")).not.toHaveValue("");
+});
