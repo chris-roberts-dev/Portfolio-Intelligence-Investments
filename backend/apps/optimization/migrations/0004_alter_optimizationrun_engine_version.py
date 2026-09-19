@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('optimization', '0003_optimizationrun_baseline_weights_and_more'),
+        ("optimization", "0003_optimizationrun_baseline_weights_and_more"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='optimizationrun',
-            name='engine_version',
-            field=models.CharField(default='0.2.0', max_length=64),
+            model_name="optimizationrun",
+            name="engine_version",
+            field=models.CharField(default="0.2.0", max_length=64),
         ),
     ]
