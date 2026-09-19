@@ -240,6 +240,93 @@ paths:
               schema:
                 $ref: '#/components/schemas/AuthSessionResult'
           description: Current authenticated or anonymous session state.
+  /api/v1/backtest-runs/:
+    get:
+      operationId: backtest_run_list
+      description: List persisted backtest runs owned by the authenticated user.
+      tags:
+      - backtesting
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BacktestRun'
+          description: ''
+    post:
+      operationId: backtest_run_create
+      description: Create and synchronously execute one persisted deterministic buy-and-hold
+        backtest. Expected analytical failures remain auditable as FAILED run resources.
+      tags:
+      - backtesting
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BacktestRunCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BacktestRunCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BacktestRunCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BacktestRun'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BacktestValidationError'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BacktestApiError'
+          description: ''
+  /api/v1/backtest-runs/{run_id}/:
+    get:
+      operationId: backtest_run_detail
+      description: Return one backtest run owned by the authenticated user.
+      parameters:
+      - in: path
+        name: run_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - backtesting
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BacktestRun'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BacktestApiError'
+          description: Run does not exist in the authenticated user's scope.
   /api/v1/health/:
     get:
       operationId: health_check
@@ -2016,6 +2103,676 @@ components:
       - first_name
       - id
       - last_name
+    BacktestApiError:
+      type: object
+      properties:
+        code:
+          type: string
+        detail:
+          type: string
+      required:
+      - code
+      - detail
+    BacktestAssumptions:
+      type: object
+      properties:
+        price_field:
+          type: string
+          readOnly: true
+        execution_timing:
+          type: string
+          readOnly: true
+        commission_rate:
+          type: number
+          format: double
+          readOnly: true
+        slippage_rate:
+          type: number
+          format: double
+          readOnly: true
+        turnover_convention:
+          type: string
+          readOnly: true
+        fractional_shares:
+          type: boolean
+          readOnly: true
+        long_only:
+          type: boolean
+          readOnly: true
+        leverage:
+          type: boolean
+          readOnly: true
+      required:
+      - commission_rate
+      - execution_timing
+      - fractional_shares
+      - leverage
+      - long_only
+      - price_field
+      - slippage_rate
+      - turnover_convention
+    BacktestCostObservation:
+      type: object
+      properties:
+        execution_date:
+          type: string
+          format: date
+          readOnly: true
+        commission_cost:
+          type: number
+          format: double
+          readOnly: true
+        slippage_cost:
+          type: number
+          format: double
+          readOnly: true
+        total_cost:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - commission_cost
+      - execution_date
+      - slippage_cost
+      - total_cost
+    BacktestDecision:
+      type: object
+      properties:
+        decision_date:
+          type: string
+          format: date
+          readOnly: true
+        orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/BacktestOrder'
+          readOnly: true
+      required:
+      - decision_date
+      - orders
+    BacktestEquityObservation:
+      type: object
+      properties:
+        trade_date:
+          type: string
+          format: date
+          readOnly: true
+        portfolio_value:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - portfolio_value
+      - trade_date
+    BacktestExecution:
+      type: object
+      properties:
+        decision_date:
+          type: string
+          format: date
+          readOnly: true
+        execution_date:
+          type: string
+          format: date
+          readOnly: true
+        orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/BacktestOrder'
+          readOnly: true
+        fills:
+          type: array
+          items:
+            $ref: '#/components/schemas/BacktestFill'
+          readOnly: true
+        pre_trade_value:
+          type: number
+          format: double
+          readOnly: true
+        post_trade_value:
+          type: number
+          format: double
+          readOnly: true
+        turnover:
+          type: number
+          format: double
+          readOnly: true
+        commission_cost:
+          type: number
+          format: double
+          readOnly: true
+        slippage_cost:
+          type: number
+          format: double
+          readOnly: true
+        total_cost:
+          type: number
+          format: double
+          readOnly: true
+        buy_scale:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - buy_scale
+      - commission_cost
+      - decision_date
+      - execution_date
+      - fills
+      - orders
+      - post_trade_value
+      - pre_trade_value
+      - slippage_cost
+      - total_cost
+      - turnover
+    BacktestFill:
+      type: object
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        side:
+          type: string
+          readOnly: true
+        quantity:
+          type: number
+          format: double
+          readOnly: true
+        reference_price:
+          type: number
+          format: double
+          readOnly: true
+        fill_price:
+          type: number
+          format: double
+          readOnly: true
+        fill_notional:
+          type: number
+          format: double
+          readOnly: true
+        commission_cost:
+          type: number
+          format: double
+          readOnly: true
+        slippage_cost:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - asset_id
+      - commission_cost
+      - fill_notional
+      - fill_price
+      - quantity
+      - reference_price
+      - side
+      - slippage_cost
+    BacktestOrder:
+      type: object
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        side:
+          type: string
+          readOnly: true
+        quantity:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - asset_id
+      - quantity
+      - side
+    BacktestPortfolioState:
+      type: object
+      properties:
+        as_of:
+          type: string
+          format: date
+          readOnly: true
+        positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/BacktestPositionSnapshot'
+          readOnly: true
+        cash:
+          type: number
+          format: double
+          readOnly: true
+        cash_weight:
+          type: number
+          format: double
+          readOnly: true
+        total_value:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - as_of
+      - cash
+      - cash_weight
+      - positions
+      - total_value
+    BacktestPositionSnapshot:
+      type: object
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        quantity:
+          type: number
+          format: double
+          readOnly: true
+        market_value:
+          type: number
+          format: double
+          readOnly: true
+        weight:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - asset_id
+      - market_value
+      - quantity
+      - weight
+    BacktestResult:
+      type: object
+      properties:
+        aligned_dates:
+          type: array
+          items:
+            type: string
+            format: date
+          readOnly: true
+        snapshots:
+          type: array
+          items:
+            $ref: '#/components/schemas/BacktestPortfolioState'
+          readOnly: true
+        equity_curve:
+          type: array
+          items:
+            $ref: '#/components/schemas/BacktestEquityObservation'
+          readOnly: true
+        returns:
+          type: array
+          items:
+            $ref: '#/components/schemas/BacktestReturnObservation'
+          readOnly: true
+        decisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/BacktestDecision'
+          readOnly: true
+        executions:
+          type: array
+          items:
+            $ref: '#/components/schemas/BacktestExecution'
+          readOnly: true
+        costs:
+          type: array
+          items:
+            $ref: '#/components/schemas/BacktestCostObservation'
+          readOnly: true
+        summary:
+          allOf:
+          - $ref: '#/components/schemas/BacktestSummary'
+          readOnly: true
+        assumptions:
+          allOf:
+          - $ref: '#/components/schemas/BacktestAssumptions'
+          readOnly: true
+        provenance:
+          allOf:
+          - $ref: '#/components/schemas/BacktestResultProvenance'
+          readOnly: true
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/BacktestWarning'
+          readOnly: true
+      required:
+      - aligned_dates
+      - assumptions
+      - costs
+      - decisions
+      - equity_curve
+      - executions
+      - provenance
+      - returns
+      - snapshots
+      - summary
+      - warnings
+    BacktestResultProvenance:
+      type: object
+      properties:
+        provider:
+          type: string
+          readOnly: true
+        retrieved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        data_fingerprint:
+          type: string
+          readOnly: true
+          nullable: true
+        requested_period_start:
+          type: string
+          format: date
+          readOnly: true
+        requested_period_end_exclusive:
+          type: string
+          format: date
+          readOnly: true
+        aligned_period_start:
+          type: string
+          format: date
+          readOnly: true
+        aligned_period_end:
+          type: string
+          format: date
+          readOnly: true
+        engine_version:
+          type: string
+          readOnly: true
+        backtest_method_version:
+          type: string
+          readOnly: true
+        strategy_name:
+          type: string
+          readOnly: true
+        strategy_version:
+          type: string
+          readOnly: true
+      required:
+      - aligned_period_end
+      - aligned_period_start
+      - backtest_method_version
+      - data_fingerprint
+      - engine_version
+      - provider
+      - requested_period_end_exclusive
+      - requested_period_start
+      - retrieved_at
+      - strategy_name
+      - strategy_version
+    BacktestReturnObservation:
+      type: object
+      properties:
+        trade_date:
+          type: string
+          format: date
+          readOnly: true
+        simple_return:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - simple_return
+      - trade_date
+    BacktestRun:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/OptimizationRunStatusEnum'
+          readOnly: true
+        strategy:
+          allOf:
+          - $ref: '#/components/schemas/BacktestStrategyEnum'
+          readOnly: true
+        included_asset_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          readOnly: true
+        parameters:
+          readOnly: true
+        initial_cash:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,16}(?:\.\d{0,8})?$
+          readOnly: true
+        commission_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,12})?$
+          readOnly: true
+        slippage_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,12})?$
+          readOnly: true
+        result:
+          allOf:
+          - $ref: '#/components/schemas/BacktestResult'
+          readOnly: true
+          nullable: true
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/BacktestWarning'
+          readOnly: true
+        failure_code:
+          type: string
+          readOnly: true
+        failure_message:
+          type: string
+          readOnly: true
+        started_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        provenance:
+          allOf:
+          - $ref: '#/components/schemas/BacktestRunProvenance'
+          readOnly: true
+      required:
+      - commission_rate
+      - completed_at
+      - created_at
+      - failure_code
+      - failure_message
+      - id
+      - included_asset_ids
+      - initial_cash
+      - parameters
+      - provenance
+      - result
+      - slippage_rate
+      - started_at
+      - status
+      - strategy
+      - warnings
+    BacktestRunCreateRequest:
+      type: object
+      properties:
+        strategy:
+          allOf:
+          - $ref: '#/components/schemas/BacktestStrategyEnum'
+          default: BUY_AND_HOLD
+        start:
+          type: string
+          format: date
+        end:
+          type: string
+          format: date
+        initial_cash:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,16}(?:\.\d{0,8})?$
+        target_weights:
+          type: array
+          items:
+            $ref: '#/components/schemas/BacktestTargetWeight'
+        commission_rate:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          default: 0.0
+        slippage_rate:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          default: 0.0
+      required:
+      - end
+      - initial_cash
+      - start
+      - target_weights
+    BacktestRunProvenance:
+      type: object
+      properties:
+        requested_period_start:
+          type: string
+          format: date
+          readOnly: true
+        requested_period_end_exclusive:
+          type: string
+          format: date
+          readOnly: true
+        provider:
+          type: string
+          readOnly: true
+        price_field:
+          type: string
+          readOnly: true
+        engine_version:
+          type: string
+          readOnly: true
+        backtest_method_version:
+          type: string
+          readOnly: true
+        strategy_version:
+          type: string
+          readOnly: true
+        data_retrieved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        data_fingerprint:
+          type: string
+          readOnly: true
+      required:
+      - backtest_method_version
+      - data_fingerprint
+      - data_retrieved_at
+      - engine_version
+      - price_field
+      - provider
+      - requested_period_end_exclusive
+      - requested_period_start
+      - strategy_version
+    BacktestStrategyEnum:
+      enum:
+      - BUY_AND_HOLD
+      type: string
+      description: '* `BUY_AND_HOLD` - Buy and hold'
+    BacktestSummary:
+      type: object
+      properties:
+        initial_value:
+          type: number
+          format: double
+          readOnly: true
+        ending_value:
+          type: number
+          format: double
+          readOnly: true
+        cumulative_return:
+          type: number
+          format: double
+          readOnly: true
+        trade_count:
+          type: integer
+          readOnly: true
+        turnover:
+          type: number
+          format: double
+          readOnly: true
+        commission_cost:
+          type: number
+          format: double
+          readOnly: true
+        slippage_cost:
+          type: number
+          format: double
+          readOnly: true
+        total_cost:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - commission_cost
+      - cumulative_return
+      - ending_value
+      - initial_value
+      - slippage_cost
+      - total_cost
+      - trade_count
+      - turnover
+    BacktestTargetWeight:
+      type: object
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+        weight:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+      required:
+      - asset_id
+      - weight
+    BacktestValidationError:
+      type: object
+      properties:
+        code:
+          type: string
+        errors:
+          type: object
+          additionalProperties: {}
+      required:
+      - code
+      - errors
+    BacktestWarning:
+      type: object
+      properties:
+        code:
+          type: string
+          readOnly: true
+        message:
+          type: string
+          readOnly: true
+      required:
+      - code
+      - message
     BenchmarkPerformancePoint:
       type: object
       description: One exact-date benchmark point; gaps remain explicit nulls.

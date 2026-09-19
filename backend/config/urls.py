@@ -35,6 +35,10 @@ urlpatterns = [
         include("apps.rebalancing.api.urls"),
     ),
     path(
+        "api/v1/",
+        include("apps.backtesting.api.urls"),
+    ),
+    path(
         "api/v1/schema/",
         SpectacularAPIView.as_view(),
         name="api-v1-schema",

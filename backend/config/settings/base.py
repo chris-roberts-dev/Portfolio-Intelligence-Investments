@@ -146,5 +146,6 @@ SPECTACULAR_SETTINGS = {
         "OptimizationRunMethodEnum": "apps.optimization.models.OptimizationRunMethod",
         "OptimizationRunStatusEnum": "apps.optimization.models.OptimizationRunStatus",
         "RebalanceScheduleEnum": "portfolio_engine.rebalancing.contracts.RebalanceSchedule",
+        "BacktestStrategyEnum": "apps.backtesting.models.BacktestStrategyName",
     },
 }

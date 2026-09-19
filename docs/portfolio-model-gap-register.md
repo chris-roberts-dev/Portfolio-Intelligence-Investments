@@ -34,7 +34,7 @@ The R file contains reusable models, research examples, test strategies, plottin
 
 The current Python project now extends its analytical foundation through the canonical Phase 5 optimization and rebalancing layers. Target-allocation validation, current drift/notional simulation, schedule and threshold rules, and deterministic historical annual/quarterly/threshold rebalancing comparisons are implemented with explicit costs, turnover, event history, provenance, and anti-look-ahead timing.
 
-The generic historical strategy backtester is still absent: `apps/backtesting` remains scaffolding, and buy-and-hold, moving-average, momentum, benchmark-comparison, and broader SIT strategy infrastructure remain outstanding. Advanced SIT allocation/risk models also remain outside this Phase 5 batch unless already covered elsewhere in the current project.
+Phase 6 now includes a framework-independent deterministic backtesting kernel with time-bounded strategy context, long-only holdings/cash state, explicit order/fill execution, commission/slippage, complete-case adjusted-close history, anti-look-ahead timing, and reproducible result provenance. The first canonical buy-and-hold strategy and owner-scoped persisted `BacktestRun` API workflow are implemented. Moving-average, momentum, benchmark comparison, drawdown/standard-metric summaries, and Strategy Lab remain outstanding. Advanced SIT allocation/risk models remain deferred unless already covered elsewhere in the current project.
 
 ## 4. Existing Coverage
 
@@ -78,23 +78,23 @@ These capabilities are already required by the current development guide and sho
 | OPT-008 | [x] | P0 | Efficient frontier | `ef.portfolio` | `portfolio_engine/optimization/efficient_frontier.py` |
 | OPT-009 | [~] | P1 | Target-return optimization | `target.return.portfolio` | `portfolio_engine/optimization/target_return.py` |
 | OPT-010 | [ ] | P1 | Target-risk optimization | `target.risk.portfolio` | `portfolio_engine/optimization/target_risk.py` |
-| REB-001 | [ ] | P0 | Target-allocation validation | R constraint and allocation helpers | `portfolio_engine/rebalancing/contracts.py` |
-| REB-002 | [ ] | P0 | Absolute and relative drift calculation | `compute.max.deviation` | `portfolio_engine/rebalancing/drift.py` |
-| REB-003 | [ ] | P0 | Simulated rebalance notionals | Share allocation helpers | `portfolio_engine/rebalancing/trades.py` |
-| REB-004 | [ ] | P0 | Monthly, quarterly, and annual schedules | `bt.rebalancing.test` | `portfolio_engine/rebalancing/schedules.py` |
-| REB-005 | [ ] | P0 | Drift-threshold rebalancing | `bt.max.deviation.rebalancing` | `portfolio_engine/rebalancing/thresholds.py` |
-| BT-001 | [ ] | P0 | Deterministic backtest state machine | `bt.run`, `bt.run.share` | `portfolio_engine/backtesting/engine.py` |
-| BT-002 | [ ] | P0 | Time-bounded strategy context | R rolling-window conventions | `portfolio_engine/backtesting/context.py` |
-| BT-003 | [ ] | P0 | Observe-at-`t`, execute-at-`t+1` enforcement | Execution-lag examples | `portfolio_engine/backtesting/execution.py` |
-| BT-004 | [ ] | P0 | Cash and position state | `compute.cash`, share engine | `portfolio_engine/backtesting/state.py` |
-| BT-005 | [ ] | P0 | Orders and simulated fills | Extended share engine | `portfolio_engine/backtesting/orders.py` |
-| BT-006 | [ ] | P0 | Commission and slippage assumptions | `compute.commission` | `portfolio_engine/backtesting/costs.py` |
-| BT-007 | [ ] | P0 | Buy-and-hold strategy | R baseline models | `portfolio_engine/backtesting/strategies/buy_and_hold.py` |
+| REB-001 | [x] | P0 | Target-allocation validation | R constraint and allocation helpers | `portfolio_engine/rebalancing/core.py` |
+| REB-002 | [x] | P0 | Absolute and relative drift calculation | `compute.max.deviation` | `portfolio_engine/rebalancing/core.py` |
+| REB-003 | [x] | P0 | Simulated rebalance notionals | Share allocation helpers | `portfolio_engine/rebalancing/core.py` |
+| REB-004 | [x] | P0 | Monthly, quarterly, and annual schedules | `bt.rebalancing.test` | `portfolio_engine/rebalancing/rules.py`, `historical.py` |
+| REB-005 | [x] | P0 | Drift-threshold rebalancing | `bt.max.deviation.rebalancing` | `portfolio_engine/rebalancing/rules.py`, `historical.py` |
+| BT-001 | [x] | P0 | Deterministic backtest state machine | `bt.run`, `bt.run.share` | `portfolio_engine/backtesting/engine.py` |
+| BT-002 | [x] | P0 | Time-bounded strategy context | R rolling-window conventions | `portfolio_engine/backtesting/context.py` |
+| BT-003 | [x] | P0 | Observe-at-`t`, execute-at-`t+1` enforcement | Execution-lag examples | `portfolio_engine/backtesting/engine.py`, `execution.py` |
+| BT-004 | [x] | P0 | Cash and position state | `compute.cash`, share engine | `portfolio_engine/backtesting/state.py` |
+| BT-005 | [x] | P0 | Orders and simulated fills | Extended share engine | `portfolio_engine/backtesting/contracts.py`, `execution.py` |
+| BT-006 | [x] | P0 | Commission and slippage assumptions | `compute.commission` | `portfolio_engine/backtesting/execution.py` |
+| BT-007 | [x] | P0 | Buy-and-hold strategy | R baseline models | `portfolio_engine/strategies/buy_and_hold.py` |
 | BT-008 | [ ] | P0 | Moving-average strategy | `timing.strategy`, MA examples | `portfolio_engine/backtesting/strategies/moving_average.py` |
 | BT-009 | [ ] | P0 | Momentum strategy | `momentum.averaged` and examples | `portfolio_engine/backtesting/strategies/momentum.py` |
 | BT-010 | [ ] | P0 | Benchmark-aligned result comparison | R comparison reports | `portfolio_engine/backtesting/comparison.py` |
-| BT-011 | [ ] | P0 | Equity, drawdown, trade, weight, and cost outputs | `bt.summary`, `bt.trade.summary` | `portfolio_engine/backtesting/results.py` |
-| BT-012 | [ ] | P0 | Immutable and reproducible run record | R has partial configuration behavior; project guide is stricter | `apps/backtesting/models.py` and service layer |
+| BT-011 | [~] | P0 | Equity, drawdown, trade, weight, and cost outputs | `bt.summary`, `bt.trade.summary` | `portfolio_engine/backtesting/contracts.py`, `engine.py` |
+| BT-012 | [x] | P0 | Immutable and reproducible run record | R has partial configuration behavior; project guide is stricter | `apps/backtesting/models.py` and service layer |
 
 ## 6. Advanced Allocation and Optimization Gaps
 
@@ -188,12 +188,12 @@ These items are not standalone models, but model results will be incomplete or m
 
 | ID | Status | Priority | Missing capability | R reference |
 | --- | --- | --- | --- | --- |
-| INF-001 | [ ] | P0 | Share-level portfolio state evolution | `bt.run.share`, `bt.run.share.ex` |
-| INF-002 | [ ] | P0 | Cash ledger for simulated activity | `compute.cash` |
-| INF-003 | [ ] | P0 | Commission model | `compute.commission` |
-| INF-004 | [ ] | P0 | Buy/sell slippage model | Execution-price examples |
-| INF-005 | [ ] | P0 | Trade and rebalance event history | `bt.trade.summary` |
-| INF-006 | [ ] | P0 | Portfolio turnover calculation | `compute.turnover` |
+| INF-001 | [x] | P0 | Share-level portfolio state evolution | `bt.run.share`, `bt.run.share.ex` |
+| INF-002 | [x] | P0 | Cash ledger for simulated activity | `compute.cash` |
+| INF-003 | [x] | P0 | Commission model | `compute.commission` |
+| INF-004 | [x] | P0 | Buy/sell slippage model | Execution-price examples |
+| INF-005 | [x] | P0 | Trade and rebalance event history | `bt.trade.summary` |
+| INF-006 | [x] | P0 | Portfolio turnover calculation | `compute.turnover` |
 | INF-007 | [ ] | P0 | Exposure calculation | `compute.exposure` |
 | INF-008 | [ ] | P1 | Dividend and split handling | `bt.unadjusted.add.div.split` |
 | INF-009 | [ ] | P1 | Contributions and withdrawals | Cash-flow event helpers |
@@ -296,15 +296,15 @@ Recommended first-release decision:
 
 **Goal:** Create the deterministic simulation substrate before adding strategy breadth.
 
-- [ ] Define strategy protocol and time-bounded `StrategyContext`.
-- [ ] Enforce observe-at-`t`, execute-at-`t+1` structurally.
-- [ ] Implement portfolio state, holdings, cash, orders, and fills.
-- [ ] Implement commission and slippage models.
-- [ ] Implement warm-up requirements and missing-price policies.
+- [x] Define strategy protocol and time-bounded `StrategyContext`.
+- [x] Enforce observe-at-`t`, execute-at-`t+1` structurally.
+- [x] Implement portfolio state, holdings, cash, orders, and fills.
+- [x] Implement commission and slippage models.
+- [x] Implement warm-up requirements and missing-price policies.
 - [ ] Implement benchmark alignment.
 - [ ] Produce equity, returns, drawdown, allocation, trade, turnover, and cost series.
-- [ ] Persist immutable run configuration, versions, warnings, and results.
-- [ ] Add look-ahead tripwire tests and deterministic replay tests.
+- [x] Persist immutable run configuration, versions, warnings, and results.
+- [x] Add look-ahead tripwire tests and deterministic replay tests.
 
 **Exit gate:** The same run inputs produce equivalent outputs, no strategy can access future data, and failed runs remain auditable.
 
@@ -312,7 +312,7 @@ Recommended first-release decision:
 
 **Goal:** Meet the current MVP backtesting gate.
 
-- [ ] Buy-and-hold.
+- [x] Buy-and-hold.
 - [ ] Moving-average timing.
 - [ ] Momentum.
 - [ ] Scheduled allocation rebalancing.
@@ -410,9 +410,9 @@ Update this table as phases move forward.
 | --- | --- | --- | --- | --- |
 | 1. Optimization contracts and estimators | Complete |  |  |  |
 | 2. Initial allocation optimizers | Complete |  |  |  |
-| 3. Rebalancing engine | Release candidate — final gate pending |  |  | Historical annual/quarterly/threshold comparison, actual same-period TWR baseline, and Rebalancing Lab are implemented. |
-| 4. Backtest engine foundation | Not started |  |  |  |
-| 5. Initial strategy catalog | Not started |  |  |  |
+| 3. Rebalancing engine | Complete |  |  | v0.2 release gate passed; historical annual/quarterly/threshold comparison, actual same-period TWR baseline, and Rebalancing Lab are implemented. |
+| 4. Backtest engine foundation | In progress |  |  | Deterministic state/context/execution foundation is implemented; benchmark alignment, drawdown and full standard result metrics remain. |
+| 5. Initial strategy catalog | In progress |  |  | Canonical buy-and-hold plus persisted backend run API are implemented; moving-average, momentum, benchmark comparison, and Strategy Lab remain. |
 | 6. Risk-based allocations | Blocked by scope amendment |  |  |  |
 | 7. Estimator expansion | Not started |  |  |  |
 | 8. Advanced research models | Deferred |  |  |  |
@@ -438,6 +438,7 @@ When completing or changing an item:
 | 2026-09-18 | Reconciled Phase 5 rebalancing status: target/drift/notional rules and historical annual/quarterly/threshold comparisons implemented; shared backtest infrastructure remains partial until Phase 6. |  |
 | 2026-09-18 | Added the Rebalancing Lab frontend for target selection/creation, current drift/trade simulation, persisted policy comparison, provenance/warnings, and the deterministic browser workflow; v0.2 release audit remains. |  |
 | 2026-09-18 | Reconciled implemented Phase 5 optimization statuses and sample covariance coverage; static/custom and standalone target-return capabilities remain partial. |  |
+| 2026-09-19 | Reconciled the completed v0.2 rebalancing statuses and added deterministic Phase 6 backtest foundation, canonical buy-and-hold, persisted owner-scoped BacktestRun workflow, and API/OpenAPI contracts; moving-average, momentum, benchmark comparison, full standard metrics, and Strategy Lab remain. |  |
 
 ---
 

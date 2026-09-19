@@ -27,11 +27,21 @@ class StrategyContext:
 
 
 class BacktestStrategy(Protocol):
-    """Minimal internal strategy boundary used by the deterministic engine."""
+    """Minimal read-only strategy boundary used by the deterministic engine.
 
-    name: str
-    version: str
-    minimum_history_observations: int
+    Strategy metadata is exposed as read-only properties so immutable/frozen
+    strategy implementations satisfy the protocol without making their
+    identity or warm-up contract mutable.
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def version(self) -> str: ...
+
+    @property
+    def minimum_history_observations(self) -> int: ...
 
     def generate_orders(self, context: StrategyContext) -> Sequence[OrderIntent]: ...
 
