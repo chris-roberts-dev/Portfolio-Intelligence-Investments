@@ -22,6 +22,7 @@ from apps.portfolios.services.trading_calendar import UsEquityTradingSessionCale
 from apps.rebalancing.models import TargetAllocation, TargetAllocationWeight
 from apps.rebalancing.services import (
     CreateHistoricalRebalanceComparisonCommand,
+    RebalancingApplicationError,
     _build_actual_portfolio_baseline,
     _return_difference_pp_vs_actual,
     create_historical_rebalance_comparison,
@@ -144,6 +145,9 @@ def test_historical_comparison_persists_required_rules_and_provenance() -> None:
     assert comparison.provider == "mock"
     assert comparison.price_field == "adjusted_close"
     assert comparison.retrieved_at == RETRIEVED_AT
+    assert comparison.engine_version == "0.2.0"
+    assert comparison.result["provenance"]["engine_version"] == "0.2.0"
+    assert comparison.result["provenance"]["method_version"] == "1.0"
     assert comparison.result["assumptions"]["execution_timing"] == (
         "decision_at_t_execute_at_next_aligned_observation"
     )
@@ -338,6 +342,97 @@ def test_actual_portfolio_baseline_changes_when_comparison_start_changes() -> No
     assert later_baseline["starting_portfolio_value"] == pytest.approx(800_000.0)
     assert later_baseline["cumulative_return"] == pytest.approx(1.005)
     assert later_baseline["cumulative_return"] != inception_baseline["cumulative_return"]
+
+
+@pytest.mark.django_db
+def test_historical_comparison_rejects_unfunded_initial_state_before_market_data() -> None:
+    user = User.objects.create_user(email="unfunded@example.com", password="password")
+    portfolio = Portfolio.objects.create(user=user, name="Unfunded")
+    asset = Asset.objects.create(
+        symbol="VOID",
+        name="Unfunded Asset",
+        asset_type=AssetType.STOCK,
+        exchange="NYSE",
+        currency="USD",
+    )
+    target = TargetAllocation.objects.create(user=user, portfolio=portfolio, name="Full target")
+    TargetAllocationWeight.objects.create(target=target, asset=asset, weight="1")
+    executor_called = False
+
+    def executor(*_args: object, **_kwargs: object) -> MarketBarBatchResult:
+        nonlocal executor_called
+        executor_called = True
+        raise AssertionError("market data must not be requested for an invalid initial state")
+
+    with pytest.raises(RebalancingApplicationError) as exc_info:
+        create_historical_rebalance_comparison(
+            user=user,
+            command=CreateHistoricalRebalanceComparisonCommand(
+                portfolio_id=portfolio.id,
+                target_allocation_id=target.id,
+                period_start=date(2026, 1, 2),
+                period_end=date(2026, 1, 6),
+                drift_threshold=0.05,
+            ),
+            provider_name="mock",
+            resolver=SimpleNamespace(),  # type: ignore[arg-type]
+            provider=SimpleNamespace(),  # type: ignore[arg-type]
+            trading_calendar=UsEquityTradingSessionCalendar(),
+            executor=executor,  # type: ignore[arg-type]
+        )
+
+    assert exc_info.value.code == "INVALID_INITIAL_PORTFOLIO_STATE"
+    assert "positive investable value" in str(exc_info.value)
+    assert executor_called is False
+
+
+@pytest.mark.django_db
+def test_historical_comparison_rejects_negative_cash_before_market_data() -> None:
+    user = User.objects.create_user(email="negative-cash@example.com", password="password")
+    portfolio = Portfolio.objects.create(user=user, name="Negative cash")
+    asset = Asset.objects.create(
+        symbol="NEGC",
+        name="Negative Cash Asset",
+        asset_type=AssetType.STOCK,
+        exchange="NYSE",
+        currency="USD",
+    )
+    Transaction.objects.create(
+        portfolio=portfolio,
+        transaction_type=TransactionType.WITHDRAWAL,
+        occurred_at=datetime(2026, 1, 2, 12, 0, tzinfo=UTC),
+        source_sequence=0,
+        cash_amount=Decimal("100"),
+    )
+    target = TargetAllocation.objects.create(user=user, portfolio=portfolio, name="Full target")
+    TargetAllocationWeight.objects.create(target=target, asset=asset, weight="1")
+    executor_called = False
+
+    def executor(*_args: object, **_kwargs: object) -> MarketBarBatchResult:
+        nonlocal executor_called
+        executor_called = True
+        raise AssertionError("market data must not be requested for negative starting cash")
+
+    with pytest.raises(RebalancingApplicationError) as exc_info:
+        create_historical_rebalance_comparison(
+            user=user,
+            command=CreateHistoricalRebalanceComparisonCommand(
+                portfolio_id=portfolio.id,
+                target_allocation_id=target.id,
+                period_start=date(2026, 1, 2),
+                period_end=date(2026, 1, 6),
+                drift_threshold=0.05,
+            ),
+            provider_name="mock",
+            resolver=SimpleNamespace(),  # type: ignore[arg-type]
+            provider=SimpleNamespace(),  # type: ignore[arg-type]
+            trading_calendar=UsEquityTradingSessionCalendar(),
+            executor=executor,  # type: ignore[arg-type]
+        )
+
+    assert exc_info.value.code == "INVALID_INITIAL_PORTFOLIO_STATE"
+    assert "negative cash balance" in str(exc_info.value)
+    assert executor_called is False
 
 
 @pytest.mark.django_db

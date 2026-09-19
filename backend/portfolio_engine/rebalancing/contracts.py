@@ -7,6 +7,8 @@ from datetime import date
 from enum import StrEnum
 from uuid import UUID
 
+REBALANCING_METHOD_VERSION = "1.0"
+
 
 class RebalancingErrorCode(StrEnum):
     INVALID_INPUT = "INVALID_INPUT"

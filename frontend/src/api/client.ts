@@ -45,9 +45,48 @@ function csrfTokenFromCookie(): string | null {
   return value ? decodeURIComponent(value) : null;
 }
 
+function firstValidationMessage(value: unknown): string | null {
+  if (typeof value === "string") {
+    const message = value.trim();
+    return message.length > 0 ? message : null;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const message = firstValidationMessage(item);
+      if (message !== null) {
+        return message;
+      }
+    }
+    return null;
+  }
+
+  if (value !== null && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const nonFieldMessage = firstValidationMessage(record.non_field_errors);
+    if (nonFieldMessage !== null) {
+      return nonFieldMessage;
+    }
+
+    for (const nested of Object.values(record)) {
+      const message = firstValidationMessage(nested);
+      if (message !== null) {
+        return message;
+      }
+    }
+  }
+
+  return null;
+}
+
 function errorMessage(payload: ApiErrorPayload, response: Response): string {
   if (typeof payload.detail === "string" && payload.detail.length > 0) {
     return payload.detail;
+  }
+
+  const validationMessage = firstValidationMessage(payload.errors);
+  if (validationMessage !== null) {
+    return validationMessage;
   }
 
   if (typeof payload.code === "string" && payload.code.length > 0) {
@@ -120,6 +159,7 @@ export async function apiPost<T, TBody extends object>(
 
   return parseResponse<T>(response);
 }
+
 export async function apiPatch<T, TBody extends object>(
   path: string,
   body: TBody,

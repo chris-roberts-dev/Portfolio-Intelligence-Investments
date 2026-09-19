@@ -8,7 +8,9 @@ test("create portfolio, record Activity transaction, configure benchmark, and re
   await loginSampleUser(page);
 
   await page.getByRole("link", { name: "Portfolios", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Portfolios" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Portfolios", exact: true }),
+  ).toBeVisible();
 
   const name = "E2E Cash Portfolio";
   await page.getByLabel("Portfolio name").fill(name);
@@ -90,6 +92,8 @@ test("an empty portfolio can be permanently deleted from Portfolio management", 
   await dialog.getByRole("button", { name: "Permanently delete portfolio" }).click();
 
   await expect(page).toHaveURL(/\/portfolios$/);
-  await expect(page.getByRole("heading", { name: "Portfolios" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Portfolios", exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole("heading", { name })).toHaveCount(0);
 });

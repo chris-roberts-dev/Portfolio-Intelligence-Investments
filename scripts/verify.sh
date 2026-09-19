@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Run deterministic Phase 4/v0.1 quality checks and report failures together.
+# Run deterministic repository quality checks and report failures together.
 # Browser tests remain a separate `make e2e` gate because they start their own
 # deterministic demo servers and Chromium process.
 
@@ -74,7 +74,7 @@ echo "============================================================"
 
 if [ "$FAILED" -eq 0 ]; then
     echo "✓ All deterministic checks passed."
-    echo "Run 'make e2e' separately for the Phase 4 browser gate."
+    echo "Run 'make e2e' separately for the browser gate."
     exit 0
 fi
 

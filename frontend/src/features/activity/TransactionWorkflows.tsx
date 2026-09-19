@@ -2,7 +2,7 @@ import {
   useMemo,
   useState,
   type ChangeEvent,
-  type FormEvent,
+  type SubmitEvent,
 } from "react";
 
 import { ApiError } from "../../api/client";
@@ -12,11 +12,6 @@ import {
   DOMAIN_PRIMARY_ACTION_CLASS,
   DOMAIN_SECONDARY_ACTION_CLASS,
 } from "../../components/ui/domainStyles";
-import {
-  apiFieldErrors,
-  firstFieldError,
-} from "../portfolioManagement/apiErrors";
-import { TransactionHistoryPanel } from "./TransactionHistoryPanel";
 import {
   useAssetCatalog,
   useConfirmPortfolioTransactionImport,
@@ -30,6 +25,11 @@ import type {
   TransactionImportPreview,
   TransactionType,
 } from "../../types/portfolioManagement";
+import {
+  apiFieldErrors,
+  firstFieldError,
+} from "../portfolioManagement/apiErrors";
+import { TransactionHistoryPanel } from "./TransactionHistoryPanel";
 
 const MAX_TRANSACTION_IMPORT_BYTES = 256 * 1024;
 const USER_TRANSACTION_CSV_TEMPLATE = [
@@ -104,6 +104,10 @@ export function TransactionWorkflows({
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
 
   const transactionErrors = apiFieldErrors(transactionMutation.error);
+  const hasTransactionFieldErrors = Object.entries(transactionErrors).some(
+    ([field, messages]) =>
+      field !== "non_field_errors" && messages.length > 0,
+  );
   const serverConfirmPreview = confirmErrorPreview(confirmMutation.error);
   const importPreview = serverConfirmPreview ?? previewMutation.data ?? null;
 
@@ -173,7 +177,7 @@ export function TransactionWorkflows({
     }
   }
 
-  async function handleTransactionSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleTransactionSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     setTransactionSuccess(null);
 
@@ -558,7 +562,8 @@ export function TransactionWorkflows({
               <p className="mb-3 text-sm text-rose-700" role="alert">
                 {firstFieldError(transactionErrors, "non_field_errors")}
               </p>
-            ) : transactionMutation.error instanceof Error ? (
+            ) : transactionMutation.error instanceof Error &&
+              !hasTransactionFieldErrors ? (
               <p className="mb-3 text-sm text-rose-700" role="alert">
                 {transactionMutation.error.message}
               </p>

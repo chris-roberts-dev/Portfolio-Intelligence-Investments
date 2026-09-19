@@ -34,7 +34,7 @@ from apps.portfolios.services.daily_performance import (
     DailyPortfolioPerformanceResult,
     calculate_owned_portfolio_daily_performance,
 )
-from apps.portfolios.services.ledger import replay_portfolio_ledger
+from apps.portfolios.services.ledger import LedgerReplayResult, replay_portfolio_ledger
 from apps.rebalancing.models import (
     HistoricalRebalanceComparison,
     RebalanceSimulation,
@@ -44,6 +44,7 @@ from apps.rebalancing.models import (
 from portfolio_engine.config import DEFAULT_COMMISSION_RATE, DEFAULT_SLIPPAGE_RATE
 from portfolio_engine.contracts.market_data import PriceFrame
 from portfolio_engine.rebalancing import (
+    REBALANCING_METHOD_VERSION,
     CurrentValue,
     HistoricalPosition,
     HistoricalRebalanceComparisonResult,
@@ -311,6 +312,7 @@ def create_historical_rebalance_comparison(
     initial_as_of = datetime.combine(command.period_start, time.max, tzinfo=UTC)
     end_exclusive = datetime.combine(command.period_end + timedelta(days=1), time.min, tzinfo=UTC)
     ledger = replay_portfolio_ledger(portfolio, as_of=initial_as_of)
+    _validate_historical_initial_state(ledger)
 
     target_weights = _engine_targets(target)
     initial_positions = tuple(
@@ -453,6 +455,29 @@ def create_historical_rebalance_comparison(
     return comparison
 
 
+def _validate_historical_initial_state(ledger: LedgerReplayResult) -> None:
+    """Reject invalid historical starting states before market-data execution."""
+    if ledger.cash_balance < Decimal("0"):
+        raise RebalancingApplicationError(
+            (
+                "Historical comparison cannot start from a negative cash balance. "
+                "Choose a later start date or correct the portfolio ledger."
+            ),
+            code="INVALID_INITIAL_PORTFOLIO_STATE",
+        )
+
+    has_positive_position = any(position.quantity > 0 for position in ledger.positions)
+    if not has_positive_position and ledger.cash_balance <= Decimal("0"):
+        raise RebalancingApplicationError(
+            (
+                "Historical comparison requires positive investable value at the requested "
+                "period start. Choose a start date on or after the portfolio's first funded "
+                "ledger state."
+            ),
+            code="INVALID_INITIAL_PORTFOLIO_STATE",
+        )
+
+
 def _owned_target_allocation(
     *,
     user: User,
@@ -533,6 +558,7 @@ def _serialize_historical_result(
             "provider": provider,
             "retrieved_at": retrieved_at.isoformat(),
             "engine_version": PORTFOLIO_ENGINE_VERSION,
+            "method_version": REBALANCING_METHOD_VERSION,
             "requested_period_start": requested_period_start.isoformat(),
             "requested_period_end": requested_period_end.isoformat(),
         },

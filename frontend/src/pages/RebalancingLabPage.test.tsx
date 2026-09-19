@@ -72,8 +72,8 @@ const optimizationRun = {
     annualization_factor: 252,
     risk_free_rate_annual: 0,
     benchmark_asset_id: null,
-    engine_version: "0.1.0.dev0",
-    method_version: "1",
+    engine_version: "0.2.0",
+    method_version: "1.0",
     data_retrieved_at: "2026-09-16T15:00:00Z",
     data_fingerprint: "fixture",
   },
@@ -245,7 +245,7 @@ const comparison = {
   drift_threshold: 0.05,
   commission_rate: 0.001,
   slippage_rate: 0.002,
-  engine_version: "0.1.0.dev0",
+  engine_version: "0.2.0",
   result: {
     period_start: "2026-02-02",
     period_end: "2026-09-15",
@@ -294,7 +294,8 @@ const comparison = {
     provenance: {
       provider: "csv",
       retrieved_at: "2026-09-16T15:00:00Z",
-      engine_version: "0.1.0.dev0",
+      engine_version: "0.2.0",
+      method_version: "1.0",
       requested_period_start: "2026-02-02",
       requested_period_end: "2026-09-15",
     },
@@ -319,7 +320,7 @@ function renderLab(fetchMock: ReturnType<typeof vi.fn>) {
   vi.stubGlobal("fetch", fetchMock);
   const queryClient = new QueryClient({
     defaultOptions: {
-      queries: { retry: false },
+      queries: { retry: false, retryDelay: 0 },
       mutations: { retry: false },
     },
   });
@@ -344,7 +345,17 @@ function renderLab(fetchMock: ReturnType<typeof vi.fn>) {
   );
 }
 
-function baseFetch({ includeTarget = true, includeRun = true } = {}) {
+function baseFetch(
+  {
+    includeTarget = true,
+    includeRun = true,
+    comparisonListStatus = 200,
+  }: {
+    includeTarget?: boolean;
+    includeRun?: boolean;
+    comparisonListStatus?: number;
+  } = {},
+) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
@@ -379,6 +390,15 @@ function baseFetch({ includeTarget = true, includeRun = true } = {}) {
     if (url.endsWith("/api/v1/historical-rebalance-comparisons/")) {
       if (method === "POST") {
         return jsonResponse(comparison, 201);
+      }
+      if (comparisonListStatus !== 200) {
+        return jsonResponse(
+          {
+            code: "HISTORICAL_COMPARISON_LIST_FAILED",
+            detail: "Historical comparisons are temporarily unavailable.",
+          },
+          comparisonListStatus,
+        );
       }
       return jsonResponse([]);
     }
@@ -420,6 +440,32 @@ describe("RebalancingLabPage", () => {
             init?.method === "POST",
         ),
       ).toBe(true);
+    });
+  });
+
+  it("surfaces a historical-comparison list query failure at the page dependency boundary", async () => {
+    renderLab(baseFetch({ comparisonListStatus: 500 }));
+
+    expect(
+      await screen.findByText("Rebalancing Lab data could not be loaded"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Historical comparisons are temporarily unavailable."),
+    ).toBeInTheDocument();
+  });
+
+  it("defaults and constrains the historical start date to portfolio ledger inception", async () => {
+    renderLab(baseFetch());
+
+    const startInput = await screen.findByLabelText("Historical period start");
+    await waitFor(() => {
+      expect(startInput).toHaveValue("2026-01-02");
+    });
+    expect(startInput).toHaveAttribute("min", "2026-01-02");
+
+    fireEvent.change(startInput, { target: { value: "2025-12-31" } });
+    await waitFor(() => {
+      expect(startInput).toHaveValue("2026-01-02");
     });
   });
 
@@ -478,6 +524,8 @@ describe("RebalancingLabPage", () => {
     expect(within(eventTable).getByText("Apr 1, 2026")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Historical comparison assumptions and provenance" })).toHaveTextContent("adjusted_close");
     expect(screen.getByRole("region", { name: "Historical comparison assumptions and provenance" })).toHaveTextContent("csv");
+    expect(screen.getByRole("region", { name: "Historical comparison assumptions and provenance" })).toHaveTextContent("0.2.0");
+    expect(screen.getByRole("region", { name: "Historical comparison assumptions and provenance" })).toHaveTextContent("1.0");
     expect(screen.getByLabelText("Rebalancing warnings")).toHaveTextContent("Actual ledger activity ignored");
     expect(screen.getByLabelText("Rebalancing warnings")).toHaveTextContent("does replay");
   });

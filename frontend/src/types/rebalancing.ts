@@ -225,6 +225,7 @@ export interface HistoricalRebalanceProvenance {
   provider: string;
   retrieved_at: string;
   engine_version: string;
+  method_version: string;
   requested_period_start: string;
   requested_period_end: string;
 }

@@ -144,8 +144,8 @@ Broader strategy and optimization research—including risk parity, Black–Litt
 
 | Release | Focus | Status |
 | --- | --- | --- |
-| `v0.1.0` | Deterministic market data, ledger-derived holdings, portfolio analytics, API surface, and analytics UI | In development |
-| `v0.2.0` | Equal weight, minimum variance, maximum Sharpe, efficient frontier, and rebalance simulation | Planned |
+| `v0.1.0` | Deterministic market data, ledger-derived holdings, portfolio analytics, API surface, and analytics UI | Complete |
+| `v0.2.0` | Equal weight, minimum variance, maximum Sharpe, efficient frontier, target allocations, and deterministic rebalancing comparison | Release candidate — final gate pending |
 | `v0.3.0` | Historical backtesting, initial strategy catalog, costs, comparisons, and Portfolio Lab | Planned public MVP |
 | `v0.4.0` | Grounded AI Portfolio Analyst over structured analytical results | Post-MVP |
 

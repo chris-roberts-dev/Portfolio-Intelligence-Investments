@@ -1,6 +1,7 @@
 """Framework-independent Phase 5 rebalancing domain."""
 
 from portfolio_engine.rebalancing.contracts import (
+    REBALANCING_METHOD_VERSION,
     CurrentValue,
     HistoricalAllocationLine,
     HistoricalPortfolioSnapshot,
@@ -34,6 +35,7 @@ from portfolio_engine.rebalancing.rules import (
 )
 
 __all__ = [
+    "REBALANCING_METHOD_VERSION",
     "TURNOVER_CONVENTION",
     "CurrentValue",
     "HistoricalAllocationLine",

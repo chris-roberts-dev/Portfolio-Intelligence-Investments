@@ -111,7 +111,11 @@ test("market explorer primary query controls are keyboard reachable at mobile wi
   });
 
   await loginSampleUser(page);
-  await page.getByRole("link", { name: "Market data" }).first().click();
+
+  // This test is about the query controls, not the responsive navigation
+  // drawer. Navigate directly so the hidden desktop sidebar cannot become a
+  // false prerequisite for the accessibility assertion.
+  await page.goto("/market-data");
 
   const symbols = page.getByLabel("Ticker symbols");
   const start = page.getByLabel("Start");

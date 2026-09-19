@@ -645,6 +645,7 @@ export function RebalancingLabPage() {
 
   const portfolios = portfoliosQuery.data ?? [];
   const selectedPortfolio = portfolios.find((portfolio) => portfolio.id === portfolioId) ?? null;
+  const ledgerInceptionDate = selectedPortfolio?.ledger_inception_at?.slice(0, 10) ?? null;
   const targets = useMemo(
     () => targetAllocationsForPortfolio(targetsQuery.data ?? [], portfolioId),
     [portfolioId, targetsQuery.data],
@@ -685,6 +686,12 @@ export function RebalancingLabPage() {
       setSelectedPolicy(activeComparison.result.policies[0]?.name ?? "annual");
     }
   }, [activeComparison, selectedPolicy]);
+
+  useEffect(() => {
+    if (ledgerInceptionDate !== null && periodStart < ledgerInceptionDate) {
+      setPeriodStart(ledgerInceptionDate);
+    }
+  }, [ledgerInceptionDate, periodStart]);
 
   function updatePortfolio(nextPortfolioId: string) {
     setPortfolioId(nextPortfolioId);
@@ -744,6 +751,12 @@ export function RebalancingLabPage() {
       setFormError("Select a portfolio and target allocation first.");
       return;
     }
+    if (ledgerInceptionDate !== null && periodStart < ledgerInceptionDate) {
+      setFormError(
+        `Historical comparison cannot start before the portfolio ledger begins on ${ledgerInceptionDate}.`,
+      );
+      return;
+    }
     if (!periodStart || !periodEnd || periodStart >= periodEnd) {
       setFormError("Historical comparison end date must be later than the start date.");
       return;
@@ -771,8 +784,18 @@ export function RebalancingLabPage() {
     }
   }
 
-  const loading = portfoliosQuery.isPending || targetsQuery.isPending || runsQuery.isPending || assetsQuery.isPending;
-  const queryError = portfoliosQuery.error ?? targetsQuery.error ?? runsQuery.error ?? assetsQuery.error;
+  const loading =
+    portfoliosQuery.isPending ||
+    targetsQuery.isPending ||
+    runsQuery.isPending ||
+    assetsQuery.isPending ||
+    comparisonsQuery.isPending;
+  const queryError =
+    portfoliosQuery.error ??
+    targetsQuery.error ??
+    runsQuery.error ??
+    assetsQuery.error ??
+    comparisonsQuery.error;
   const simulationError = createSimulation.error instanceof Error ? errorCopy(createSimulation.error) : null;
   const comparisonError = createComparison.error instanceof Error ? errorCopy(createComparison.error) : null;
 
@@ -896,7 +919,7 @@ export function RebalancingLabPage() {
               <h2 className="text-lg font-semibold text-slate-950">Historical rule comparison</h2>
               <p className="mt-1 text-sm text-slate-600">Annual, quarterly, and absolute drift-threshold policies share the same initial state, aligned adjusted-close history, costs, and target allocation.</p>
               <div className="mt-5 grid grid-cols-2 gap-3">
-                <label className="text-xs font-semibold text-slate-700">Period start<input aria-label="Historical period start" type="date" value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-blue-500" /></label>
+                <label className="text-xs font-semibold text-slate-700">Period start<input aria-label="Historical period start" type="date" min={ledgerInceptionDate ?? undefined} value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-blue-500" /></label>
                 <label className="text-xs font-semibold text-slate-700">Period end<input aria-label="Historical period end" type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-blue-500" /></label>
                 <label className="text-xs font-semibold text-slate-700">Drift threshold<input aria-label="Absolute drift threshold" type="number" min="0" max="1" step="0.001" value={threshold} onChange={(event) => setThreshold(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-blue-500" /></label>
                 <label className="text-xs font-semibold text-slate-700">Commission rate<input aria-label="Commission rate" type="number" min="0" max="1" step="0.0001" value={commissionRate} onChange={(event) => setCommissionRate(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-blue-500" /></label>
@@ -969,6 +992,7 @@ export function RebalancingLabPage() {
                     <div><dt className="text-xs text-slate-500">Aligned period</dt><dd className="mt-1 font-semibold text-slate-900">{activeComparison.result.period_start} to {activeComparison.result.period_end}</dd></div>
                     <div><dt className="text-xs text-slate-500">Commission / slippage</dt><dd className="mt-1 font-semibold text-slate-900">{formatPercent(activeComparison.result.assumptions.commission_rate)} / {formatPercent(activeComparison.result.assumptions.slippage_rate)}</dd></div>
                     <div><dt className="text-xs text-slate-500">Engine version</dt><dd className="mt-1 font-semibold text-slate-900">{activeComparison.result.provenance.engine_version}</dd></div>
+                    <div><dt className="text-xs text-slate-500">Rebalancing method version</dt><dd className="mt-1 font-semibold text-slate-900">{activeComparison.result.provenance.method_version}</dd></div>
                     <div><dt className="text-xs text-slate-500">Actual portfolio return</dt><dd className="mt-1 font-semibold text-slate-900">{activeComparison.result.actual_portfolio?.return_method ?? "Not available"} · same aligned period</dd></div>
                   </dl>
                   <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700"><p className="font-semibold text-slate-900">Turnover convention</p><p className="mt-1">{activeComparison.result.assumptions.turnover_convention}</p><p className="mt-2">Later actual ledger activity: {activeComparison.result.assumptions.later_actual_ledger_activity.replaceAll("_", " ")}.</p></div>

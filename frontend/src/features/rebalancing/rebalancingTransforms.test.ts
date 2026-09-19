@@ -53,7 +53,7 @@ const RUN: OptimizationRun = {
     annualization_factor: 252,
     risk_free_rate_annual: 0,
     benchmark_asset_id: null,
-    engine_version: "0.1.0.dev0",
+    engine_version: "0.2.0",
     method_version: "1",
     data_retrieved_at: "2026-09-17T12:00:00Z",
     data_fingerprint: "fixture",
@@ -97,7 +97,7 @@ function comparisonFixture(): HistoricalRebalanceComparison {
     drift_threshold: 0.05,
     commission_rate: 0,
     slippage_rate: 0,
-    engine_version: "0.1.0.dev0",
+    engine_version: "0.2.0",
     warnings: [],
     created_at: "2026-01-06T00:00:00Z",
     result: {
@@ -137,7 +137,8 @@ function comparisonFixture(): HistoricalRebalanceComparison {
       provenance: {
         provider: "csv",
         retrieved_at: "2026-01-05T23:00:00Z",
-        engine_version: "0.1.0.dev0",
+        engine_version: "0.2.0",
+        method_version: "1.0",
         requested_period_start: "2026-01-01",
         requested_period_end: "2026-01-05",
       },

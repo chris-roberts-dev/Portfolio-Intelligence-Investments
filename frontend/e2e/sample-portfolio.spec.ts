@@ -15,15 +15,19 @@ test("sample portfolio exposes deterministic dashboard and portfolio analytics",
   await expect(currentValueRow).toBeVisible();
   await expect(currentValueRow).not.toContainText("Not available");
 
+  // The deterministic sample ledger begins on 2026-01-02. Use YTD for the
+  // analytics-availability assertion so the return series begins at the
+  // portfolio's funded inception rather than including a multi-year zero-value
+  // pre-inception interval, for which TWR is intentionally undefined.
   const dashboardPeriodControls = page.getByRole("group", {
     name: "Portfolio report date range",
   });
-  await dashboardPeriodControls.getByRole("button", { name: "3Y" }).click();
+  await dashboardPeriodControls.getByRole("button", { name: "YTD" }).click();
 
-  await expect(page).toHaveURL(/range=3Y/);
+  await expect(page).toHaveURL(/range=YTD/);
   const analysisUrl = new URL(page.url());
   analysisUrl.pathname = analysisUrl.pathname.replace(/\/dashboard$/, "/analysis");
-  analysisUrl.search = "?range=3Y";
+  analysisUrl.search = "?range=YTD";
   await page.goto(analysisUrl.toString());
 
   await expect(
@@ -58,6 +62,7 @@ test("sample portfolio exposes deterministic dashboard and portfolio analytics",
     /range=1W/,
   );
 });
+
 test("portfolio report exposes print-friendly content without application chrome", async ({
   page,
 }) => {
@@ -117,7 +122,9 @@ test("portfolio report detail navigation preserves portfolio and reporting-perio
   await page.getByRole("link", { name: "Risk", exact: true }).click();
   await expect(page).toHaveURL(/range=3Y.*view=risk|view=risk.*range=3Y/);
   await expect(page.locator("#portfolio-report-detail-heading")).toHaveText("Risk");
-  await expect(page.getByText("Calculation context")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Calculation context" }),
+  ).toBeVisible();
 
   await page.getByRole("link", { name: "Transactions", exact: true }).click();
   await expect(page).toHaveURL(/range=3Y.*view=transactions|view=transactions.*range=3Y/);

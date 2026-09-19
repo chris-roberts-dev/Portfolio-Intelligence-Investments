@@ -1,6 +1,6 @@
 COMPOSE := docker compose
 
-.PHONY: bootstrap-env up up-build down logs backend-shell frontend-shell db-shell check lint format-check typecheck test lock frontend-lock locks market-data-offline-demo market-data-live-smoke openapi verify sample-demo-reset sample-demo-server playwright-install e2e v01-release-check createsuperuser
+.PHONY: bootstrap-env up up-build down logs backend-shell frontend-shell db-shell check lint format-check typecheck test lock frontend-lock locks market-data-offline-demo market-data-live-smoke openapi verify sample-demo-reset sample-demo-server playwright-install e2e v01-release-check v02-release-check createsuperuser
 
 bootstrap-env:
 	@test -f .env || cp .env.example .env
@@ -35,6 +35,9 @@ check:
 
 check-migration: 
 	$(COMPOSE) run --rm backend python manage.py makemigrations --check --dry-run --settings=config.settings.dev
+
+migration: 
+	$(COMPOSE) run --rm backend python manage.py makemigrations --settings=config.settings.dev
 
 migrate: 
 	$(COMPOSE) run --rm backend python manage.py migrate --settings=config.settings.dev
@@ -88,3 +91,5 @@ e2e:
 	cd frontend && npm run test:e2e
 
 v01-release-check: verify e2e
+
+v02-release-check: verify e2e

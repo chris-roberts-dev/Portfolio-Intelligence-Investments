@@ -3,7 +3,7 @@
 **Status:** Active implementation tracker  
 **Created:** September 15, 2026  
 **Comparison sources:** `project-consolidated.md` and `code(1).r`  
-**Project engine version reviewed:** `0.1.0.dev0`  
+**Project engine version reviewed:** `0.2.0`  
 
 ## 1. Purpose
 
@@ -68,21 +68,21 @@ These capabilities are already required by the current development guide and sho
 
 | ID | Status | Priority | Missing capability | R reference | Recommended Python destination |
 | --- | --- | --- | --- | --- | --- |
-| OPT-001 | [ ] | P0 | Full aligned covariance matrix | `create.ia`, `create.cov.matrix` | `portfolio_engine/optimization/estimators.py` |
-| OPT-002 | [ ] | P0 | Long-only weight constraint contract | `new.constraints`, `add.constraints` | `portfolio_engine/optimization/constraints.py` |
-| OPT-003 | [ ] | P0 | Solver-result validation | R optimization wrappers | `portfolio_engine/optimization/validation.py` |
-| OPT-004 | [ ] | P0 | Equal-weight allocation | `equal.weight.portfolio` | `portfolio_engine/optimization/equal_weight.py` |
-| OPT-005 | [ ] | P0 | Static/custom target allocation | `static.weight.portfolio`, `custom.weight.portfolio` | `portfolio_engine/optimization/custom_weight.py` |
-| OPT-006 | [ ] | P0 | Minimum-variance optimization | `min.var.portfolio` | `portfolio_engine/optimization/minimum_variance.py` |
-| OPT-007 | [ ] | P0 | Maximum-Sharpe optimization | `max.sharpe.portfolio` | `portfolio_engine/optimization/maximum_sharpe.py` |
-| OPT-008 | [ ] | P0 | Efficient frontier | `ef.portfolio` | `portfolio_engine/optimization/efficient_frontier.py` |
-| OPT-009 | [ ] | P1 | Target-return optimization | `target.return.portfolio` | `portfolio_engine/optimization/target_return.py` |
+| OPT-001 | [x] | P0 | Full aligned covariance matrix | `create.ia`, `create.cov.matrix` | `portfolio_engine/optimization/estimators.py` |
+| OPT-002 | [x] | P0 | Long-only weight constraint contract | `new.constraints`, `add.constraints` | `portfolio_engine/optimization/constraints.py` |
+| OPT-003 | [x] | P0 | Solver-result validation | R optimization wrappers | `portfolio_engine/optimization/validation.py` |
+| OPT-004 | [x] | P0 | Equal-weight allocation | `equal.weight.portfolio` | `portfolio_engine/optimization/equal_weight.py` |
+| OPT-005 | [~] | P0 | Static/custom target allocation | `static.weight.portfolio`, `custom.weight.portfolio` | `portfolio_engine/optimization/custom_weight.py` |
+| OPT-006 | [x] | P0 | Minimum-variance optimization | `min.var.portfolio` | `portfolio_engine/optimization/minimum_variance.py` |
+| OPT-007 | [x] | P0 | Maximum-Sharpe optimization | `max.sharpe.portfolio` | `portfolio_engine/optimization/maximum_sharpe.py` |
+| OPT-008 | [x] | P0 | Efficient frontier | `ef.portfolio` | `portfolio_engine/optimization/efficient_frontier.py` |
+| OPT-009 | [~] | P1 | Target-return optimization | `target.return.portfolio` | `portfolio_engine/optimization/target_return.py` |
 | OPT-010 | [ ] | P1 | Target-risk optimization | `target.risk.portfolio` | `portfolio_engine/optimization/target_risk.py` |
-| REB-001 | [x] | P0 | Target-allocation validation | R constraint and allocation helpers | `portfolio_engine/rebalancing/core.py` |
-| REB-002 | [x] | P0 | Absolute and relative drift calculation | `compute.max.deviation` | `portfolio_engine/rebalancing/core.py` |
-| REB-003 | [x] | P0 | Simulated rebalance notionals | Share allocation helpers | `portfolio_engine/rebalancing/core.py` |
-| REB-004 | [x] | P0 | Monthly, quarterly, and annual schedules | `bt.rebalancing.test` | `portfolio_engine/rebalancing/rules.py`, `historical.py` |
-| REB-005 | [x] | P0 | Drift-threshold rebalancing | `bt.max.deviation.rebalancing` | `portfolio_engine/rebalancing/rules.py`, `historical.py` |
+| REB-001 | [ ] | P0 | Target-allocation validation | R constraint and allocation helpers | `portfolio_engine/rebalancing/contracts.py` |
+| REB-002 | [ ] | P0 | Absolute and relative drift calculation | `compute.max.deviation` | `portfolio_engine/rebalancing/drift.py` |
+| REB-003 | [ ] | P0 | Simulated rebalance notionals | Share allocation helpers | `portfolio_engine/rebalancing/trades.py` |
+| REB-004 | [ ] | P0 | Monthly, quarterly, and annual schedules | `bt.rebalancing.test` | `portfolio_engine/rebalancing/schedules.py` |
+| REB-005 | [ ] | P0 | Drift-threshold rebalancing | `bt.max.deviation.rebalancing` | `portfolio_engine/rebalancing/thresholds.py` |
 | BT-001 | [ ] | P0 | Deterministic backtest state machine | `bt.run`, `bt.run.share` | `portfolio_engine/backtesting/engine.py` |
 | BT-002 | [ ] | P0 | Time-bounded strategy context | R rolling-window conventions | `portfolio_engine/backtesting/context.py` |
 | BT-003 | [ ] | P0 | Observe-at-`t`, execute-at-`t+1` enforcement | Execution-lag examples | `portfolio_engine/backtesting/execution.py` |
@@ -136,7 +136,7 @@ These capabilities are already required by the current development guide and sho
 
 | ID | Status | Priority | Missing estimator/model | R implementation |
 | --- | --- | --- | --- | --- |
-| EST-001 | [ ] | P0 | Complete-case aligned sample covariance matrix | `create.ia`, `cov.sample` |
+| EST-001 | [x] | P0 | Complete-case aligned sample covariance matrix | `create.ia`, `cov.sample` |
 | EST-002 | [ ] | P1 | Positive-definite covariance repair policy | Used by R optimization functions |
 | EST-003 | [ ] | P2 | Diagonal shrinkage | `diagonal.shrinkage`, `shrink.diag` |
 | EST-004 | [ ] | P2 | Constant-correlation shrinkage | `cov.const.cor`, `shrink.const.cor` |
@@ -188,12 +188,12 @@ These items are not standalone models, but model results will be incomplete or m
 
 | ID | Status | Priority | Missing capability | R reference |
 | --- | --- | --- | --- | --- |
-| INF-001 | [~] | P0 | Share-level portfolio state evolution | `bt.run.share`, `bt.run.share.ex` |
-| INF-002 | [~] | P0 | Cash ledger for simulated activity | `compute.cash` |
-| INF-003 | [~] | P0 | Commission model | `compute.commission` |
-| INF-004 | [~] | P0 | Buy/sell slippage model | Execution-price examples |
-| INF-005 | [~] | P0 | Trade and rebalance event history | `bt.trade.summary` |
-| INF-006 | [~] | P0 | Portfolio turnover calculation | `compute.turnover` |
+| INF-001 | [ ] | P0 | Share-level portfolio state evolution | `bt.run.share`, `bt.run.share.ex` |
+| INF-002 | [ ] | P0 | Cash ledger for simulated activity | `compute.cash` |
+| INF-003 | [ ] | P0 | Commission model | `compute.commission` |
+| INF-004 | [ ] | P0 | Buy/sell slippage model | Execution-price examples |
+| INF-005 | [ ] | P0 | Trade and rebalance event history | `bt.trade.summary` |
+| INF-006 | [ ] | P0 | Portfolio turnover calculation | `compute.turnover` |
 | INF-007 | [ ] | P0 | Exposure calculation | `compute.exposure` |
 | INF-008 | [ ] | P1 | Dividend and split handling | `bt.unadjusted.add.div.split` |
 | INF-009 | [ ] | P1 | Contributions and withdrawals | Cash-flow event helpers |
@@ -218,8 +218,8 @@ These metrics should not block the optimization foundation, but several support 
 | MET-005 | [ ] | P2 | Conditional Drawdown at Risk metric | `compute.cdar` |
 | MET-006 | [C] | P2 | Historical VaR metric | `compute.var` |
 | MET-007 | [C] | P2 | Historical CVaR metric | `compute.cvar` |
-| MET-008 | [~] | P1 | Turnover | `compute.turnover` |
-| MET-009 | [x] | P1 | Allocation drift/deviation | `compute.max.deviation` |
+| MET-008 | [ ] | P1 | Turnover | `compute.turnover` |
+| MET-009 | [ ] | P1 | Allocation drift/deviation | `compute.max.deviation` |
 | MET-010 | [ ] | P2 | Exposure percentage | `compute.exposure` |
 | MET-011 | [ ] | P3 | Ulcer Index | `ulcer.index` |
 | MET-012 | [ ] | P3 | EV ratio | `ev.ratio` |
@@ -251,13 +251,13 @@ Recommended first-release decision:
 
 **Goal:** Establish trustworthy inputs and solver boundaries.
 
-- [ ] Define immutable optimization request/result contracts.
-- [ ] Implement complete-case return alignment for an asset set.
-- [ ] Implement sample covariance matrix and expected-return estimates.
-- [ ] Define weight bounds, total-weight, cash, and feasibility rules.
-- [ ] Implement independent solver-result validation.
-- [ ] Attach analytical provenance, warnings, assumptions, and engine version.
-- [ ] Add unit, property, validation, and independent numerical-reference tests.
+- [x] Define immutable optimization request/result contracts.
+- [x] Implement complete-case return alignment for an asset set.
+- [x] Implement sample covariance matrix and expected-return estimates.
+- [x] Define weight bounds, total-weight, cash, and feasibility rules.
+- [x] Implement independent solver-result validation.
+- [x] Attach analytical provenance, warnings, assumptions, and engine version.
+- [x] Add unit, property, validation, and independent numerical-reference tests.
 
 **Exit gate:** The engine produces deterministic, validated estimator and constraint objects without performing portfolio optimization.
 
@@ -265,15 +265,15 @@ Recommended first-release decision:
 
 **Goal:** Deliver the canonical allocation comparison required by the development guide.
 
-- [ ] Implement equal-weight allocation.
-- [ ] Implement static/custom target weights.
-- [ ] Implement minimum-variance allocation.
-- [ ] Implement maximum-Sharpe allocation.
-- [ ] Implement efficient frontier generation.
-- [ ] Implement target-return and target-risk helpers if needed by frontier generation.
-- [ ] Revalidate all returned weights and objectives outside the solver.
-- [ ] Persist reproducible optimization runs through the Django application layer.
-- [ ] Add comparison API contracts and tests.
+- [x] Implement equal-weight allocation.
+- [ ] Implement static/custom target weights. *(Partial: persisted target allocations exist, but there is no standalone custom-weight optimizer method.)*
+- [x] Implement minimum-variance allocation.
+- [x] Implement maximum-Sharpe allocation.
+- [x] Implement efficient frontier generation.
+- [ ] Implement target-return and target-risk helpers if needed by frontier generation. *(Partial: target-return constrained optimization exists internally for frontier generation; target-risk remains absent.)*
+- [x] Revalidate all returned weights and objectives outside the solver.
+- [x] Persist reproducible optimization runs through the Django application layer.
+- [x] Add comparison API contracts and tests.
 
 **Exit gate:** A user can compare current, equal-weight, minimum-variance, and maximum-Sharpe allocations and view a validated efficient frontier.
 
@@ -408,9 +408,9 @@ Update this table as phases move forward.
 
 | Phase | Status | Owner | Target | Notes |
 | --- | --- | --- | --- | --- |
-| 1. Optimization contracts and estimators | Not started |  |  |  |
-| 2. Initial allocation optimizers | Not started |  |  |  |
-| 3. Rebalancing engine | Release audit pending |  |  | Historical annual/quarterly/threshold comparison and the Rebalancing Lab frontend are implemented; generic strategy/buy-and-hold work remains Phase 6 scope. |
+| 1. Optimization contracts and estimators | Complete |  |  |  |
+| 2. Initial allocation optimizers | Complete |  |  |  |
+| 3. Rebalancing engine | Release candidate — final gate pending |  |  | Historical annual/quarterly/threshold comparison, actual same-period TWR baseline, and Rebalancing Lab are implemented. |
 | 4. Backtest engine foundation | Not started |  |  |  |
 | 5. Initial strategy catalog | Not started |  |  |  |
 | 6. Risk-based allocations | Blocked by scope amendment |  |  |  |
@@ -437,6 +437,7 @@ When completing or changing an item:
 | 2026-09-15 | Initial gap register created from consolidated Python project and Systematic Investor Toolbox R comparison. |  |
 | 2026-09-18 | Reconciled Phase 5 rebalancing status: target/drift/notional rules and historical annual/quarterly/threshold comparisons implemented; shared backtest infrastructure remains partial until Phase 6. |  |
 | 2026-09-18 | Added the Rebalancing Lab frontend for target selection/creation, current drift/trade simulation, persisted policy comparison, provenance/warnings, and the deterministic browser workflow; v0.2 release audit remains. |  |
+| 2026-09-18 | Reconciled implemented Phase 5 optimization statuses and sample covariance coverage; static/custom and standalone target-return capabilities remain partial. |  |
 
 ---
 
